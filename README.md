@@ -2,7 +2,6 @@
 
 A public-safe React + Express homelab documentation portal template for tracking assets, services, runbooks, network notes, project/security work, and secret references.
 
-This repository intentionally ships with **demo data only**. It is designed to be safe to publish and fork. Replace the example inventory with your own private data only in a private deployment.
 
 ## Features
 
