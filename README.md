@@ -115,20 +115,8 @@ UNIFI_SITE=default
 UNIFI_INSECURE_TLS=true
 ```
 
-These are placeholders. Do not commit real credentials.
-
-## Before publishing your fork
-
-Run the included public-safety grep checks from the repository root:
-
-```bash
-grep -RInE "BEGIN .*PRIVATE KEY|AKIA|password=|token=|api[_-]?key|client_secret|ssh-rsa|ed25519" . --exclude-dir=node_modules || true
-grep -RInE "([0-9]{1,3}\.){3}[0-9]{1,3}" . --exclude-dir=node_modules || true
-grep -RInE "@|\.local|your-real-domain\.com" . --exclude-dir=node_modules || true
-```
 
 Then manually review the results.
 
 ## License
 
-Add your preferred license before publishing.
