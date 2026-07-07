@@ -1,0 +1,14 @@
+services:
+  homelab-docs:
+    build: .
+    container_name: homelab-docs
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8110:8110"
+    volumes:
+      - ./backend/data:/app/backend/data
+      - ./backend/uploads:/app/backend/uploads
+    environment:
+      - PORT=8110

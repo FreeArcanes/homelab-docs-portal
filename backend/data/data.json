@@ -1,0 +1,258 @@
+{
+  "meta": {
+    "appName": "Homelab Docs Portal",
+    "subtitle": "Example self-hosted documentation portal for assets, services, runbooks, networking, and security projects.",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "publicTemplate": true,
+    "privacyNote": "This file contains demo data only. Replace with your own private data in production."
+  },
+  "assets": [
+    {
+      "id": "asset-lab-server-01",
+      "name": "LAB-SERVER-01",
+      "type": "Server",
+      "status": "Active",
+      "ip": "10.0.10.10",
+      "owner": "Infrastructure",
+      "tags": ["Linux", "Docker", "Example"],
+      "summary": "Example container host for demo services.",
+      "details": "Replace this with your own asset information in a private deployment.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "asset-lab-dc-01",
+      "name": "LAB-DC-01",
+      "type": "Virtual Machine",
+      "status": "Example",
+      "ip": "10.0.10.5",
+      "owner": "Identity",
+      "tags": ["DNS", "Directory", "Example"],
+      "summary": "Example identity/DNS server placeholder.",
+      "details": "Do not publish real domain controller names, IPs, domains, users, or topology.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "asset-admin-ws-01",
+      "name": "ADMIN-WS-01",
+      "type": "Workstation",
+      "status": "Example",
+      "ip": "10.0.20.25",
+      "owner": "Lab Admin",
+      "tags": ["Admin", "Endpoint", "Example"],
+      "summary": "Example admin workstation placeholder.",
+      "details": "Use generic examples for public repos; keep real user/workstation data private.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "services": [
+    {
+      "id": "service-dashboard",
+      "name": "Example Dashboard",
+      "category": "Dashboard",
+      "status": "Active",
+      "host": "LAB-SERVER-01",
+      "url": "http://10.0.10.10:3000",
+      "port": "3000",
+      "image": "example/dashboard:latest",
+      "tags": ["Docker", "Example"],
+      "notes": "Demo service entry. Replace image, URL, and operational notes in your private deployment.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "service-monitoring",
+      "name": "Example Monitoring",
+      "category": "Monitoring",
+      "status": "Active",
+      "host": "LAB-SERVER-01",
+      "url": "http://10.0.10.10:3001",
+      "port": "3001",
+      "image": "example/monitoring:latest",
+      "tags": ["Monitoring", "Docker", "Example"],
+      "notes": "Track service uptime, alerts, and maintenance windows here.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "service-docs",
+      "name": "Homelab Docs Portal",
+      "category": "Documentation",
+      "status": "Active",
+      "host": "LAB-SERVER-01",
+      "url": "http://10.0.10.10:8110",
+      "port": "8110",
+      "image": "homelab-docs:latest",
+      "tags": ["Docs", "React", "Express"],
+      "notes": "This demo application. Keep production data files out of public repositories.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "docs": [
+    {
+      "id": "doc-example-architecture-overview",
+      "title": "Example Architecture Overview",
+      "category": "Architecture",
+      "type": "document",
+      "format": "html",
+      "status": "Published",
+      "tags": ["Example", "Architecture", "Documentation"],
+      "summary": "A safe public example showing how to document a lab architecture without exposing private details.",
+      "body": "<h1>Example Architecture Overview</h1><p>This is demo content for a public GitHub template. Replace every placeholder with private production details only in your private deployment.</p><h2>Example Layout</h2><ul><li>Internet → Gateway → Core switch → Server VLAN</li><li>Documentation service runs on an internal container host.</li><li>Secrets are referenced by location only, never stored directly.</li></ul><div class='doc-callout warning'><strong>Privacy Reminder</strong><p>Do not publish real public IPs, private IPs, hostnames, user names, domains, runbooks, screenshots, backups, exports, or secret locations from your environment.</p></div>",
+      "attachments": [],
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "doc-example-security-project",
+      "title": "Example Security Patching Project",
+      "category": "Projects/Security/Security Patching",
+      "type": "document",
+      "format": "html",
+      "status": "Example",
+      "tags": ["Security", "Patching", "Example"],
+      "summary": "Public-safe example of a security project entry.",
+      "body": "<h1>Example Security Patching Project</h1><p>This project demonstrates how to track remediation work without publishing real CVE findings, asset names, IP addresses, client names, or incident details.</p><h2>Example Workflow</h2><ol><li>Identify affected package or container.</li><li>Review release notes.</li><li>Patch in a maintenance window.</li><li>Validate health checks.</li><li>Document rollback notes.</li></ol>",
+      "attachments": [],
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "runbooks": [
+    {
+      "id": "runbook-restart-example-service",
+      "title": "Restart an Example Docker Service",
+      "category": "Docker",
+      "displayStatus": "Ready",
+      "displayImpact": "Low",
+      "tags": ["Docker", "Example"],
+      "summary": "Safe generic restart workflow for a Docker Compose service.",
+      "steps": [
+        "Open a shell on the container host.",
+        "Change to the application directory, for example: cd /opt/example-service.",
+        "Run: docker compose ps",
+        "Run: docker compose restart <service-name>",
+        "Validate: docker compose logs --tail=100 <service-name>",
+        "Validate the application health endpoint or web UI."
+      ],
+      "notes": "Replace placeholders with real service names only in private documentation.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "runbook-backup-before-change",
+      "title": "Create Backup Before Change",
+      "category": "Change Management",
+      "displayStatus": "Ready",
+      "displayImpact": "Medium",
+      "tags": ["Backup", "Rollback", "Example"],
+      "summary": "Template runbook for taking a backup before modifying a service.",
+      "steps": [
+        "Record current app version and container status.",
+        "Create a timestamped archive of the app directory.",
+        "Export current configuration and data files.",
+        "Perform the change.",
+        "Run validation checks.",
+        "Document rollback steps and outcome."
+      ],
+      "notes": "Public template only. Do not include real backup paths or credentials.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "secrets": [
+    {
+      "id": "secret-reference-example-dns-token",
+      "name": "DNS Provider API Token",
+      "location": "Password manager item: Example / DNS Provider / API Token",
+      "related": "DNS automation and certificate renewal",
+      "rotation": "Quarterly",
+      "notes": "Reference only. Never store token values in this application or in Git.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "secret-reference-example-controller-account",
+      "name": "Network Controller Read-Only Account",
+      "location": "Password manager item: Example / Network Controller / Read Only",
+      "related": "Optional UniFi/network controller connector",
+      "rotation": "Semiannual",
+      "notes": "Use environment variables for runtime configuration. Do not commit .env.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "networking": [
+    {
+      "id": "network-gateway",
+      "name": "Example Gateway",
+      "type": "Gateway",
+      "status": "Example",
+      "ip": "10.0.0.1",
+      "url": "https://10.0.0.1",
+      "tags": ["Gateway", "Firewall", "Example"],
+      "notes": "Example gateway record. Replace privately with your own gateway details.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "network-server-vlan",
+      "name": "Server VLAN",
+      "type": "VLAN",
+      "status": "Example",
+      "ip": "10.0.10.0/24",
+      "url": "",
+      "tags": ["VLAN", "Servers", "Example"],
+      "notes": "Demo VLAN documentation entry.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "network-user-vlan",
+      "name": "User VLAN",
+      "type": "VLAN",
+      "status": "Example",
+      "ip": "10.0.20.0/24",
+      "url": "",
+      "tags": ["VLAN", "Users", "Example"],
+      "notes": "Demo user VLAN documentation entry.",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "activity": [
+    {
+      "id": "activity-demo-1",
+      "action": "created",
+      "collection": "docs",
+      "itemId": "doc-example-architecture-overview",
+      "itemName": "Example Architecture Overview",
+      "host": null,
+      "at": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "projects": [
+    {
+      "id": "projects-security",
+      "name": "Projects/Security",
+      "category": "Projects/Security",
+      "children": [
+        {
+          "name": "Projects",
+          "items": [
+            {
+              "title": "Example Architecture Overview",
+              "docId": "doc-example-architecture-overview",
+              "date": "2026-01-01",
+              "status": "Published"
+            }
+          ]
+        },
+        {
+          "name": "Security Patching",
+          "items": [
+            {
+              "title": "Example Security Patching Project",
+              "docId": "doc-example-security-project",
+              "date": "2026-01-01",
+              "status": "Example"
+            }
+          ]
+        }
+      ],
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "projectsSecurity": []
+}

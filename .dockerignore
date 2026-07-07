@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+**/node_modules
+frontend/dist
+backend/data/backups
+backend/uploads/*
+!backend/uploads/.gitkeep
+backups
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.bak
+*.log

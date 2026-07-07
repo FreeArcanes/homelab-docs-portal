@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Example homelab topology</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0e0e10;
+  --bg-elev: #16161a;
+  --bg-panel: #1c1c21;
+  --border: #2a2a30;
+  --border-strong: #3a3a44;
+  --text: #d7d5cf;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #6db4ff;
+  --line: #4a4a52;
+  --line-dim: #25252b;
+  --danger: #e08585;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 14px; overflow: hidden; }
+
+header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 16px; background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  position: relative; z-index: 10; height: 45px;
+}
+header h1 {
+  font-size: 13px; font-weight: 500; margin: 0; letter-spacing: 0.02em;
+  color: var(--text);
+}
+.badge {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  color: var(--text-muted); padding: 2px 7px;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+.toolbar { display: flex; gap: 4px; margin-left: auto; align-items: center; }
+.toolbar button {
+  background: var(--bg-panel); color: var(--text);
+  border: 1px solid var(--border); padding: 6px 12px;
+  border-radius: 4px; cursor: pointer; font-size: 12px;
+  font-family: inherit; transition: all 0.12s;
+}
+.toolbar button:hover { background: var(--border); border-color: var(--border-strong); }
+.toolbar button.danger { color: var(--danger); }
+.toolbar button.danger:hover { background: rgba(224, 133, 133, 0.08); border-color: var(--danger); }
+.toolbar .sep { width: 1px; height: 18px; background: var(--border); margin: 0 6px; }
+
+#canvas-wrap {
+  position: absolute; top: 45px; left: 0; right: 320px; bottom: 0;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 1px 1px, var(--line-dim) 1px, transparent 0) 0 0 / 24px 24px,
+    var(--bg);
+}
+#canvas {
+  position: relative; width: 1700px; height: 1100px;
+}
+#connectors {
+  position: absolute; top: 0; left: 0; pointer-events: none;
+}
+#nodes { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+.node {
+  position: absolute;
+  padding: 9px 13px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: move;
+  user-select: none;
+  min-width: 130px;
+  transition: box-shadow 0.12s, transform 0.05s;
+  z-index: 1;
+}
+.node:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); z-index: 2; }
+.node.selected {
+  outline: 1.5px solid var(--accent); outline-offset: 2px;
+  box-shadow: 0 4px 20px rgba(109, 180, 255, 0.18);
+  z-index: 5;
+}
+.node .title {
+  font-size: 13px; font-weight: 500; line-height: 1.25;
+  letter-spacing: 0.005em;
+}
+.node .subtitle {
+  font-size: 10.5px; opacity: 0.78; margin-top: 3px;
+  font-family: 'IBM Plex Mono', monospace; line-height: 1.35;
+}
+.node [contenteditable="true"] {
+  outline: none; cursor: text;
+  background: rgba(255,255,255,0.07);
+  border-radius: 2px; padding: 0 4px; margin: 0 -4px;
+}
+.node .delete-handle {
+  position: absolute; top: -7px; right: -7px;
+  width: 17px; height: 17px; border-radius: 50%;
+  background: var(--bg-panel); border: 1px solid var(--border-strong);
+  color: var(--text-muted); cursor: pointer; display: none;
+  font-size: 13px; line-height: 13px; text-align: center;
+  font-family: inherit; padding: 0;
+}
+.node:hover .delete-handle, .node.selected .delete-handle { display: block; }
+.node .delete-handle:hover { color: var(--danger); border-color: var(--danger); }
+
+.node-purple { background: #1c1740; border-color: #534AB7; color: #C8C2F2; }
+.node-teal   { background: #0c3328; border-color: #0F6E56; color: #8FD9C2; }
+.node-coral  { background: #401a0e; border-color: #993C1D; color: #ECB39B; }
+.node-amber  { background: #2f1d0a; border-color: #854F0B; color: #F2C063; }
+.node-pink   { background: #3a1020; border-color: #993556; color: #ECB0C5; }
+.node-blue   { background: #0c243e; border-color: #185FA5; color: #A8C7E8; }
+.node-gray   { background: #25252a; border-color: #5F5E5A; color: #BCBAB2; }
+
+#inspector {
+  position: fixed; top: 45px; right: 0; bottom: 0; width: 320px;
+  background: var(--bg-elev); border-left: 1px solid var(--border);
+  padding: 18px; overflow-y: auto; z-index: 5;
+}
+#inspector h2 {
+  font-size: 10px; font-weight: 500; margin: 0 0 12px;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted);
+}
+.inspector-section {
+  margin-bottom: 20px; padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.inspector-section:last-child { border-bottom: none; padding-bottom: 0; }
+
+.field { margin-bottom: 12px; }
+.field label {
+  display: block; font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px;
+}
+.field input, .field textarea {
+  width: 100%; padding: 7px 10px; background: var(--bg-panel);
+  border: 1px solid var(--border); color: var(--text);
+  border-radius: 4px; font-size: 12.5px; font-family: inherit;
+  transition: border-color 0.12s;
+}
+.field input:focus, .field textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+.field textarea {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  resize: vertical; min-height: 50px;
+}
+
+.colors { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.color-swatch {
+  aspect-ratio: 1; border-radius: 4px; cursor: pointer;
+  border: 2px solid transparent; transition: transform 0.1s;
+}
+.color-swatch:hover { transform: scale(1.12); }
+.color-swatch.active { border-color: var(--text); }
+.color-swatch[data-color="purple"] { background: #534AB7; }
+.color-swatch[data-color="teal"]   { background: #0F6E56; }
+.color-swatch[data-color="coral"]  { background: #993C1D; }
+.color-swatch[data-color="amber"]  { background: #854F0B; }
+.color-swatch[data-color="pink"]   { background: #993556; }
+.color-swatch[data-color="blue"]   { background: #185FA5; }
+.color-swatch[data-color="gray"]   { background: #5F5E5A; }
+
+.inspector-btn {
+  width: 100%; padding: 8px 12px; background: var(--bg-panel);
+  color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; font-size: 12px; cursor: pointer;
+  font-family: inherit; margin-bottom: 6px; text-align: left;
+}
+.inspector-btn:hover { background: var(--border); }
+.inspector-btn.danger:hover { background: rgba(224, 133, 133, 0.1); color: var(--danger); border-color: var(--danger); }
+.inspector-btn.active { background: rgba(109, 180, 255, 0.12); color: var(--accent); border-color: var(--accent); }
+
+.empty-state {
+  padding: 8px 4px; color: var(--text-dim);
+  font-size: 12px; line-height: 1.8;
+}
+.empty-state h3 {
+  color: var(--text-muted); font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  margin: 0 0 14px; font-weight: 500;
+}
+.empty-state kbd {
+  display: inline-block; padding: 1px 6px;
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 3px; font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: var(--text-muted);
+  min-width: 14px; text-align: center;
+}
+.empty-state ul { list-style: none; padding: 0; margin: 0; }
+.empty-state li { margin: 6px 0; }
+
+.connections-list {
+  font-size: 11px; color: var(--text-muted); line-height: 1.6;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.connections-list .conn-item {
+  padding: 3px 0; display: flex; align-items: center; gap: 6px;
+}
+.connections-list .conn-arrow { color: var(--text-dim); }
+
+.edge-line { stroke: var(--line); stroke-width: 1.5; fill: none; transition: stroke 0.12s, stroke-width 0.12s; pointer-events: stroke; cursor: pointer; }
+.edge-line:hover { stroke: var(--accent); stroke-width: 2.5; }
+.edge-line.dashed { stroke-dasharray: 4 4; opacity: 0.7; }
+.edge-label {
+  font-family: 'IBM Plex Mono', monospace; font-size: 9.5px;
+  fill: var(--text-muted);
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+body.linking #canvas-wrap { cursor: crosshair; }
+body.linking .node { outline: 1px dashed var(--accent); outline-offset: 2px; }
+body.linking .node.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+body.linking .node:hover { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: 0 4px 18px rgba(109, 180, 255, 0.3); }
+
+.status {
+  position: fixed; bottom: 14px; left: 16px;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  padding: 8px 14px; border-radius: 6px;
+  font-size: 11px; color: var(--text-muted);
+  font-family: 'IBM Plex Mono', monospace;
+  z-index: 4;
+  transition: opacity 0.3s;
+}
+.status.fade { opacity: 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Example homelab topology</h1>
+  <span class="badge">editable</span>
+  <div class="toolbar">
+    <button id="btn-add-node">+ Node</button>
+    <div class="sep"></div>
+    <button id="btn-export">Export JSON</button>
+    <button id="btn-import">Import JSON</button>
+    <button id="btn-export-svg">Export SVG</button>
+    <div class="sep"></div>
+    <button id="btn-reset" class="danger">Reset</button>
+  </div>
+</header>
+
+<div id="canvas-wrap">
+  <div id="canvas">
+    <svg id="connectors" width="1700" height="1100"></svg>
+    <div id="nodes"></div>
+  </div>
+</div>
+
+<aside id="inspector">
+  <div id="inspector-content"></div>
+</aside>
+
+<div class="status" id="status">Ready</div>
+
+<input type="file" id="file-import" accept=".json,application/json" style="display:none">
+
+<script>
+const STATE_KEY = 'homelab_topology_demo_v1';
+const CANVAS_W = 1700;
+const CANVAS_H = 1100;
+
+function defaultState() {
+  return {
+    nodes: [
+      // Tier 1 — WAN edge
+      { id: 'internet',   x: 40,   y: 30,  title: 'Internet / Remote', subtitle: 'External clients', color: 'purple' },
+      { id: 'edge-proxy', x: 260,  y: 30,  title: 'Edge / Reverse Proxy', subtitle: 'public.example.com · apps', color: 'purple' },
+      { id: 'ddns',       x: 500,  y: 30,  title: 'DDNS Provider',       subtitle: 'optional public hostname',   color: 'purple' },
+      { id: 'isp',   x: 720,  y: 30,  title: 'ISP modem',    subtitle: 'WAN handoff · 203.0.113.10', color: 'teal'   },
+
+      // Tier 2 — Gateway
+      { id: 'ucg',        x: 560,  y: 150, w: 280, title: 'Gateway Appliance', subtitle: 'gw 10.0.0.1 · firewall · DHCP · optional port forward', color: 'teal' },
+
+      // Tier 3 — Gateway direct
+      { id: 'switch',     x: 100,  y: 280, title: 'ACCESS-SW-01', subtitle: 'example access switch · Gateway P1', color: 'teal'  },
+      { id: 'adminuser',     x: 340,  y: 280, title: 'Admin Workstation',         subtitle: '10.0.20.25 · Gateway P2 · admin endpoint', color: 'gray'  },
+      { id: 'server01',     x: 600,  y: 280, title: 'LAB-SERVER-01',        subtitle: '10.0.10.10 · Gateway P3 · Server VLAN · Docker', color: 'coral' },
+      { id: 'mystery',    x: 860,  y: 280, title: 'Unknown',        subtitle: 'Gateway P4 · Home Network · TBD', color: 'gray' },
+
+      // Tier 4 — Switch fan-out
+      { id: 'workstation02',      x: 30,   y: 420, title: 'WORKSTATION-02',       subtitle: '10.0.20.26 · SW P2 · example endpoint', color: 'gray' },
+      { id: 'hypervisor', x: 220,  y: 420, title: 'LAB-HV-01',      subtitle: '10.0.10.30 · SW P4 · hypervisor', color: 'gray' },
+      { id: 'fsps',       x: 410,  y: 420, title: 'LAB-FILE-01',        subtitle: '10.0.10.20 · SW P6 · NAS',         color: 'teal' },
+      { id: 'ap',         x: 600,  y: 420, title: 'Home Lab AP',    subtitle: '10.0.20.32 · SW P8 · Wi-Fi',       color: 'teal' },
+
+      // Tier 5 — VMs / Wireless
+      { id: 'dc02',       x: 130,  y: 560, title: 'LAB-DC-01',        subtitle: '10.0.10.5 · VM · directory / DNS',        color: 'gray' },
+      { id: 'fsps02',     x: 320,  y: 560, title: 'LAB-FILE-02',      subtitle: '10.0.10.21 · VM · file share',     color: 'teal' },
+      { id: 'security',   x: 510,  y: 560, title: 'SECURITY-VM-01', subtitle: '10.0.10.40 · security tooling', color: 'gray' },
+      { id: 'trusted',    x: 700,  y: 560, title: 'Trusted Wi-Fi',  subtitle: 'VLAN 1 · 10.0.20.0/24',   color: 'gray' },
+      { id: 'iot',        x: 890,  y: 560, title: 'IoT',            subtitle: 'VLAN 20 · 10.0.20.0/24', color: 'amber' },
+      { id: 'guest',      x: 1080, y: 560, title: 'Guest',          subtitle: 'VLAN 30 · 10.0.30.0/24', color: 'amber' },
+      { id: 'lab-vlan',   x: 1270, y: 560, title: 'Lab VLAN',      subtitle: 'VLAN 78 · test network',     color: 'pink' },
+
+      // Tier 6 — LAB-SERVER-01 services
+      { id: 'svc-websites', x: 460, y: 720, w: 200, title: 'Websites',           subtitle: 'Site A · Site B · Docs',   color: 'purple' },
+      { id: 'svc-apps',     x: 700, y: 720, w: 200, title: 'Example Apps',       subtitle: 'self-hosted app stack',              color: 'amber' },
+      { id: 'svc-ops',      x: 940, y: 720, w: 220, title: 'Ops · monitoring',   subtitle: 'dashboard · uptime · admin UI',       color: 'purple' },
+      { id: 'svc-dns',      x: 460, y: 840, w: 200, title: 'DNS · security',     subtitle: 'DNS filtering · runtime alerts',       color: 'gray' },
+      { id: 'svc-storage',  x: 700, y: 840, w: 200, title: 'Storage / Media',    subtitle: 'example storage services',             color: 'gray' },
+      { id: 'svc-backup',    x: 940, y: 840, w: 220, title: 'Backup Service',      subtitle: 'snapshots → backup target',               color: 'gray' },
+    ],
+    edges: [
+      { from: 'internet',   to: 'edge-proxy' },
+      { from: 'edge-proxy', to: 'ucg',     label: 'secure ingress', dashed: true },
+      { from: 'ddns',       to: 'ucg',     label: 'DDNS',   dashed: true },
+      { from: 'isp',   to: 'ucg',     label: 'WAN' },
+
+      { from: 'ucg', to: 'switch',  label: 'P1' },
+      { from: 'ucg', to: 'adminuser',  label: 'P2' },
+      { from: 'ucg', to: 'server01',  label: 'P3' },
+      { from: 'ucg', to: 'mystery', label: 'P4', dashed: true },
+
+      { from: 'switch', to: 'workstation02',   label: 'P2' },
+      { from: 'switch', to: 'hypervisor', label: 'P4' },
+      { from: 'switch', to: 'fsps',    label: 'P6' },
+      { from: 'switch', to: 'ap',      label: 'P8' },
+
+      { from: 'hypervisor', to: 'dc02',   dashed: true, label: 'VM' },
+      { from: 'hypervisor', to: 'fsps02', dashed: true, label: 'VM' },
+
+      { from: 'ap', to: 'trusted' },
+      { from: 'ap', to: 'iot' },
+      { from: 'ap', to: 'guest' },
+      { from: 'ap', to: 'lab-vlan' },
+
+      { from: 'server01', to: 'svc-websites' },
+      { from: 'server01', to: 'svc-apps' },
+      { from: 'server01', to: 'svc-ops' },
+      { from: 'server01', to: 'svc-dns' },
+      { from: 'server01', to: 'svc-storage' },
+      { from: 'server01', to: 'svc-backup' },
+
+      { from: 'svc-storage', to: 'fsps',   dashed: true, label: 'storage mount A'  },
+      { from: 'svc-storage', to: 'fsps02', dashed: true, label: 'storage mount B' },
+      { from: 'svc-backup', to: 'adminuser', dashed: true, label: 'SFTP' },
+      { from: 'svc-dns',   to: 'dc02',   dashed: true, label: 'DNS fwd' },
+    ]
+  };
+}
+
+let state;
+let selectedNodeId = null;
+let linkingFrom = null;
+let saveTimer = null;
+
+function loadState() {
+  try {
+    const data = localStorage.getItem(STATE_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch { return null; }
+}
+function saveState() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(STATE_KEY, JSON.stringify(state));
+      flashStatus('Saved');
+    } catch (e) {
+      flashStatus('Save failed: ' + e.message);
+    }
+  }, 200);
+}
+function flashStatus(msg) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.classList.remove('fade');
+  clearTimeout(flashStatus._t);
+  flashStatus._t = setTimeout(() => el.classList.add('fade'), 1500);
+}
+
+state = loadState() || defaultState();
+
+function $(s) { return document.querySelector(s); }
+function getNode(id) { return state.nodes.find(n => n.id === id); }
+
+function getNodeRect(id) {
+  const n = getNode(id);
+  if (!n) return null;
+  const el = document.querySelector(`[data-id="${id}"]`);
+  if (!el) return null;
+  return {
+    x: n.x, y: n.y,
+    w: el.offsetWidth, h: el.offsetHeight,
+    cx: n.x + el.offsetWidth/2,
+    cy: n.y + el.offsetHeight/2,
+  };
+}
+
+function rectEdgeIntersection(rect, from, to) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (dx === 0 && dy === 0) return { x: from.x, y: from.y };
+  const halfW = rect.w / 2;
+  const halfH = rect.h / 2;
+  const tx = dx === 0 ? Infinity : halfW / Math.abs(dx);
+  const ty = dy === 0 ? Infinity : halfH / Math.abs(dy);
+  const t = Math.min(tx, ty);
+  return { x: from.x + dx * t, y: from.y + dy * t };
+}
+
+function renderNodes() {
+  const container = $('#nodes');
+  container.innerHTML = '';
+  for (const node of state.nodes) {
+    const div = document.createElement('div');
+    div.className = 'node node-' + (node.color || 'gray');
+    if (node.id === selectedNodeId) div.classList.add('selected');
+    div.style.left = node.x + 'px';
+    div.style.top = node.y + 'px';
+    if (node.w) div.style.width = node.w + 'px';
+    div.dataset.id = node.id;
+
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = node.title || 'Untitled';
+    div.appendChild(title);
+
+    if (node.subtitle !== undefined && node.subtitle !== '') {
+      const sub = document.createElement('div');
+      sub.className = 'subtitle';
+      sub.textContent = node.subtitle;
+      div.appendChild(sub);
+    }
+
+    const del = document.createElement('button');
+    del.className = 'delete-handle';
+    del.textContent = '×';
+    del.title = 'Delete node';
+    del.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
+    del.addEventListener('click', e => { e.stopPropagation(); deleteNode(node.id); });
+    div.appendChild(del);
+
+    container.appendChild(div);
+  }
+}
+
+function renderEdges() {
+  const svg = $('#connectors');
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  for (let i = 0; i < state.edges.length; i++) {
+    const edge = state.edges[i];
+    const f = getNodeRect(edge.from);
+    const t = getNodeRect(edge.to);
+    if (!f || !t) continue;
+
+    const p1 = rectEdgeIntersection(f, { x: f.cx, y: f.cy }, { x: t.cx, y: t.cy });
+    const p2 = rectEdgeIntersection(t, { x: t.cx, y: t.cy }, { x: f.cx, y: f.cy });
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', p1.x);
+    line.setAttribute('y1', p1.y);
+    line.setAttribute('x2', p2.x);
+    line.setAttribute('y2', p2.y);
+    line.setAttribute('class', 'edge-line' + (edge.dashed ? ' dashed' : ''));
+    line.dataset.idx = i;
+    line.addEventListener('click', () => {
+      if (confirm(`Delete connection ${edge.from} → ${edge.to}?`)) {
+        state.edges.splice(i, 1);
+        saveState(); render();
+      }
+    });
+    svg.appendChild(line);
+
+    if (edge.label) {
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', (p1.x + p2.x) / 2);
+      text.setAttribute('y', (p1.y + p2.y) / 2);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dominant-baseline', 'central');
+      text.setAttribute('class', 'edge-label');
+      text.textContent = edge.label;
+      svg.appendChild(text);
+    }
+  }
+}
+
+function escapeHTML(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderInspector() {
+  const c = $('#inspector-content');
+  if (!selectedNodeId) {
+    c.innerHTML = `
+      <div class="empty-state">
+        <h3>Help</h3>
+        <ul>
+          <li><kbd>Click</kbd> a node to inspect / edit it</li>
+          <li><kbd>Drag</kbd> any node to reposition</li>
+          <li><kbd>Dbl-click</kbd> a label to edit text inline</li>
+          <li><kbd>Del</kbd> on selected to remove it</li>
+          <li><kbd>Esc</kbd> to deselect / cancel connect</li>
+          <li><kbd>Click</kbd> on a line to delete the connection</li>
+        </ul>
+        <p style="margin-top: 20px; font-size: 11px; color: var(--text-dim); line-height: 1.6;">
+          Your layout autosaves to this browser. Use <kbd>Export JSON</kbd> to make a permanent backup or share with another machine.
+        </p>
+      </div>`;
+    return;
+  }
+  const n = getNode(selectedNodeId);
+  if (!n) { selectedNodeId = null; renderInspector(); return; }
+
+  c.innerHTML = `
+    <div class="inspector-section">
+      <h2>Node · ${escapeHTML(n.id)}</h2>
+      <div class="field">
+        <label>Title</label>
+        <input type="text" id="ip-title" value="${escapeHTML(n.title)}">
+      </div>
+      <div class="field">
+        <label>Subtitle</label>
+        <textarea id="ip-subtitle" rows="2">${escapeHTML(n.subtitle)}</textarea>
+      </div>
+      <div class="field">
+        <label>Color</label>
+        <div class="colors">
+          ${['purple','teal','coral','amber','pink','blue','gray'].map(c =>
+            `<div class="color-swatch ${n.color === c ? 'active' : ''}" data-color="${c}" title="${c}"></div>`
+          ).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="inspector-section">
+      <h2>Actions</h2>
+      <button class="inspector-btn ${linkingFrom === n.id ? 'active' : ''}" id="ip-connect">
+        ${linkingFrom === n.id ? 'Click target node…' : '↳ Connect to another node'}
+      </button>
+      <button class="inspector-btn danger" id="ip-delete">Delete node</button>
+    </div>
+    <div class="inspector-section">
+      <h2>Connections</h2>
+      <div class="connections-list">${listEdgesFor(n.id)}</div>
+    </div>
+  `;
+
+  $('#ip-title').addEventListener('input', e => {
+    n.title = e.target.value;
+    const el = document.querySelector(`[data-id="${n.id}"] .title`);
+    if (el) el.textContent = n.title || 'Untitled';
+    renderEdges(); saveState();
+  });
+  $('#ip-subtitle').addEventListener('input', e => {
+    n.subtitle = e.target.value;
+    renderNodes(); renderEdges(); saveState();
+  });
+  document.querySelectorAll('.color-swatch').forEach(sw => {
+    sw.onclick = () => {
+      n.color = sw.dataset.color;
+      saveState(); render();
+    };
+  });
+  $('#ip-connect').onclick = () => {
+    if (linkingFrom === n.id) {
+      linkingFrom = null;
+      document.body.classList.remove('linking');
+    } else {
+      linkingFrom = n.id;
+      document.body.classList.add('linking');
+    }
+    renderInspector();
+  };
+  $('#ip-delete').onclick = () => deleteNode(n.id);
+}
+
+function listEdgesFor(id) {
+  const outgoing = state.edges.filter(e => e.from === id).map(e =>
+    `<div class="conn-item"><span class="conn-arrow">→</span> ${escapeHTML(getNode(e.to)?.title || e.to)}${e.label ? ` <span style="color:var(--text-dim)">(${escapeHTML(e.label)})</span>` : ''}</div>`
+  );
+  const incoming = state.edges.filter(e => e.to === id).map(e =>
+    `<div class="conn-item"><span class="conn-arrow">←</span> ${escapeHTML(getNode(e.from)?.title || e.from)}${e.label ? ` <span style="color:var(--text-dim)">(${escapeHTML(e.label)})</span>` : ''}</div>`
+  );
+  const all = [...outgoing, ...incoming];
+  if (all.length === 0) return '<em style="opacity:.5; font-style: normal;">No connections</em>';
+  return all.join('');
+}
+
+function render() {
+  renderNodes();
+  renderEdges();
+  renderInspector();
+}
+
+let dragState = null;
+
+$('#canvas').addEventListener('mousedown', e => {
+  const nodeEl = e.target.closest('.node');
+  if (!nodeEl) return;
+  if (e.target.matches('[contenteditable="true"]')) return;
+  if (e.target.closest('.delete-handle')) return;
+
+  const id = nodeEl.dataset.id;
+
+  if (linkingFrom && linkingFrom !== id) {
+    if (state.edges.find(ed => ed.from === linkingFrom && ed.to === id)) {
+      flashStatus('Connection already exists');
+    } else {
+      state.edges.push({ from: linkingFrom, to: id });
+      flashStatus(`Connected ${getNode(linkingFrom)?.title || linkingFrom} → ${getNode(id)?.title || id}`);
+    }
+    linkingFrom = null;
+    document.body.classList.remove('linking');
+    saveState(); render();
+    return;
+  }
+
+  selectedNodeId = id;
+  renderInspector();
+  document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+  nodeEl.classList.add('selected');
+
+  const node = getNode(id);
+  dragState = {
+    node, el: nodeEl,
+    startX: e.clientX, startY: e.clientY,
+    origX: node.x, origY: node.y,
+    moved: false,
+  };
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', e => {
+  if (!dragState) return;
+  const dx = e.clientX - dragState.startX;
+  const dy = e.clientY - dragState.startY;
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragState.moved = true;
+  dragState.node.x = Math.max(0, dragState.origX + dx);
+  dragState.node.y = Math.max(0, dragState.origY + dy);
+  dragState.el.style.left = dragState.node.x + 'px';
+  dragState.el.style.top = dragState.node.y + 'px';
+  renderEdges();
+});
+
+document.addEventListener('mouseup', () => {
+  if (dragState && dragState.moved) saveState();
+  dragState = null;
+});
+
+$('#nodes').addEventListener('dblclick', e => {
+  const el = e.target.closest('.title, .subtitle');
+  if (!el) return;
+  const nodeEl = el.closest('.node');
+  if (!nodeEl) return;
+
+  el.contentEditable = 'true';
+  el.focus();
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  const s = window.getSelection();
+  s.removeAllRanges(); s.addRange(r);
+
+  const id = nodeEl.dataset.id;
+  const n = getNode(id);
+  const field = el.classList.contains('title') ? 'title' : 'subtitle';
+  const orig = n[field];
+
+  const finish = () => {
+    el.contentEditable = 'false';
+    n[field] = el.textContent;
+    saveState();
+    renderEdges();
+    renderInspector();
+    el.removeEventListener('blur', finish);
+    el.removeEventListener('keydown', keyHandler);
+  };
+  const keyHandler = ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); }
+    if (ev.key === 'Escape') { el.textContent = orig || ''; el.blur(); }
+  };
+  el.addEventListener('blur', finish);
+  el.addEventListener('keydown', keyHandler);
+});
+
+document.addEventListener('keydown', e => {
+  if (document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedNodeId) { deleteNode(selectedNodeId); e.preventDefault(); }
+  }
+  if (e.key === 'Escape') {
+    selectedNodeId = null;
+    linkingFrom = null;
+    document.body.classList.remove('linking');
+    render();
+  }
+});
+
+$('#canvas-wrap').addEventListener('mousedown', e => {
+  if (e.target.closest('.node')) return;
+  if (e.target.tagName === 'line' || e.target.tagName === 'text') return;
+  selectedNodeId = null;
+  linkingFrom = null;
+  document.body.classList.remove('linking');
+  document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+  renderInspector();
+});
+
+function deleteNode(id) {
+  const n = getNode(id);
+  if (!n) return;
+  if (!confirm(`Delete "${n.title}" and its connections?`)) return;
+  state.nodes = state.nodes.filter(n => n.id !== id);
+  state.edges = state.edges.filter(e => e.from !== id && e.to !== id);
+  if (selectedNodeId === id) selectedNodeId = null;
+  if (linkingFrom === id) { linkingFrom = null; document.body.classList.remove('linking'); }
+  saveState(); render();
+  flashStatus('Node deleted');
+}
+
+function addNode() {
+  const wrap = $('#canvas-wrap');
+  const x = wrap.scrollLeft + 80;
+  const y = wrap.scrollTop + 80;
+  const id = 'node-' + Date.now();
+  state.nodes.push({ id, x, y, title: 'New node', subtitle: 'edit me', color: 'gray' });
+  selectedNodeId = id;
+  saveState(); render();
+  setTimeout(() => {
+    const el = document.querySelector(`[data-id="${id}"] .title`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 50);
+}
+
+$('#btn-add-node').onclick = addNode;
+
+$('#btn-export').onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `homelab-topology-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  flashStatus('Exported JSON');
+};
+
+$('#btn-import').onclick = () => $('#file-import').click();
+$('#file-import').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data.nodes || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) throw new Error('Missing nodes / edges arrays');
+      state = data;
+      selectedNodeId = null;
+      saveState();
+      render();
+      flashStatus('Imported ' + f.name);
+    } catch (err) {
+      alert('Failed to import: ' + err.message);
+    }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+};
+
+$('#btn-export-svg').onclick = () => {
+  // Build a self-contained SVG snapshot of the current layout
+  const colorMap = {
+    purple: { bg: '#1c1740', border: '#534AB7', text: '#C8C2F2' },
+    teal:   { bg: '#0c3328', border: '#0F6E56', text: '#8FD9C2' },
+    coral:  { bg: '#401a0e', border: '#993C1D', text: '#ECB39B' },
+    amber:  { bg: '#2f1d0a', border: '#854F0B', text: '#F2C063' },
+    pink:   { bg: '#3a1020', border: '#993556', text: '#ECB0C5' },
+    blue:   { bg: '#0c243e', border: '#185FA5', text: '#A8C7E8' },
+    gray:   { bg: '#25252a', border: '#5F5E5A', text: '#BCBAB2' },
+  };
+  let maxX = 0, maxY = 0;
+  state.nodes.forEach(n => {
+    const el = document.querySelector(`[data-id="${n.id}"]`);
+    if (!el) return;
+    maxX = Math.max(maxX, n.x + el.offsetWidth);
+    maxY = Math.max(maxY, n.y + el.offsetHeight);
+  });
+  const W = maxX + 40, H = maxY + 40;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="'IBM Plex Sans', system-ui, sans-serif"><rect width="${W}" height="${H}" fill="#0e0e10"/>`;
+  // Edges first
+  state.edges.forEach(edge => {
+    const f = getNodeRect(edge.from), t = getNodeRect(edge.to);
+    if (!f || !t) return;
+    const p1 = rectEdgeIntersection(f, { x: f.cx, y: f.cy }, { x: t.cx, y: t.cy });
+    const p2 = rectEdgeIntersection(t, { x: t.cx, y: t.cy }, { x: f.cx, y: f.cy });
+    svg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#4a4a52" stroke-width="1.5"${edge.dashed ? ' stroke-dasharray="4 4" opacity="0.7"' : ''}/>`;
+    if (edge.label) {
+      const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+      svg += `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Mono', monospace" font-size="9.5" fill="#8a8a8e" paint-order="stroke" stroke="#0e0e10" stroke-width="4" font-weight="500">${escapeHTML(edge.label)}</text>`;
+    }
+  });
+  // Nodes
+  state.nodes.forEach(n => {
+    const el = document.querySelector(`[data-id="${n.id}"]`);
+    if (!el) return;
+    const c = colorMap[n.color || 'gray'];
+    const w = el.offsetWidth, h = el.offsetHeight;
+    svg += `<g transform="translate(${n.x},${n.y})">`;
+    svg += `<rect width="${w}" height="${h}" rx="6" fill="${c.bg}" stroke="${c.border}" stroke-width="1"/>`;
+    svg += `<text x="13" y="22" fill="${c.text}" font-size="13" font-weight="500">${escapeHTML(n.title)}</text>`;
+    if (n.subtitle) {
+      svg += `<text x="13" y="40" fill="${c.text}" opacity="0.78" font-family="'IBM Plex Mono', monospace" font-size="10.5">${escapeHTML(n.subtitle)}</text>`;
+    }
+    svg += `</g>`;
+  });
+  svg += `</svg>`;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `homelab-topology-${new Date().toISOString().slice(0,10)}.svg`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  flashStatus('Exported SVG');
+};
+
+$('#btn-reset').onclick = () => {
+  if (confirm('Reset to default topology? Your edits in this browser will be lost.')) {
+    state = defaultState();
+    selectedNodeId = null;
+    linkingFrom = null;
+    document.body.classList.remove('linking');
+    saveState();
+    render();
+    flashStatus('Reset to default');
+  }
+};
+
+render();
+</script>
+</body>
+</html>
