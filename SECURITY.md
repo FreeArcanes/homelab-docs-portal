@@ -12,10 +12,4 @@ This project is a documentation portal template. Documentation portals often acc
 - screenshots or archives from your actual environment
 - incident response notes or security runbooks that expose real procedures
 
-## Recommended workflow
 
-1. Keep this public repository as a clean template.
-2. Deploy a private fork or private copy for real documentation.
-3. Keep runtime data mounted as a volume and excluded from Git.
-4. Review every export before sharing.
-5. Rotate any credential that was ever committed by mistake.
