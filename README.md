@@ -23,6 +23,7 @@ Do **not** commit production data into this repository. Keep the following out o
 - API tokens, passwords, SSH keys, cert private keys, tunnel credentials, backup archives, exports, uploads, and database dumps
 - `backend/data/backups/` and `backend/uploads/`
 
+The included `.gitignore` is intentionally strict, but you should still manually review before pushing.
 
 ## Quick start
 
