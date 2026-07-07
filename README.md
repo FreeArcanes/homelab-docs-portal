@@ -23,7 +23,6 @@ Do **not** commit production data into this repository. Keep the following out o
 - API tokens, passwords, SSH keys, cert private keys, tunnel credentials, backup archives, exports, uploads, and database dumps
 - `backend/data/backups/` and `backend/uploads/`
 
-The included `.gitignore` is intentionally strict, but you should still manually review before pushing.
 
 ## Quick start
 
@@ -115,7 +114,67 @@ UNIFI_INSECURE_TLS=true
 ```
 
 
-Then manually review the results.
+
+
+<!-- FEATURE_SCREENSHOTS_START -->
+
+## Feature Preview
+
+A few highlights from the Homelab Docs Portal interface.
+
+### Dashboard Overview
+
+Centralized landing page for homelab status, inventory summaries, recent activity, and quick navigation.
+
+![Dashboard Overview](docs/homelab-docs-screenshots/01-dashboard.png)
+
+---
+
+### Services Inventory
+
+Track self-hosted apps, ports, URLs, owners, status, and operational notes in one clean service catalog.
+
+![Services Inventory](docs/homelab-docs-screenshots/03-services.png)
+
+---
+
+### Networking Overview
+
+Document VLANs, network zones, topology notes, routing structure, and infrastructure relationships.
+
+![Networking Overview](docs/homelab-docs-screenshots/04-network-overview.png)
+
+---
+
+### Interactive Topology
+
+Visualize lab relationships between gateways, switches, servers, endpoints, and service layers.
+
+![Interactive Topology](docs/homelab-docs-screenshots/05-interactive-topology.png)
+
+---
+
+### Runbooks
+
+Store repeatable operational procedures for backups, patching, recovery, incident response, and maintenance.
+
+![Runbooks](docs/homelab-docs-screenshots/14-runbooks.png)
+
+---
+
+### Projects & Security
+
+Track security projects, hardening tasks, audits, lifecycle work, and remediation progress.
+
+![Projects and Security](docs/homelab-docs-screenshots/15-projects-security.png)
+
+---
+
+For the full screenshot gallery, see:
+
+[`docs/homelab-docs-screenshots/README_SCREENSHOTS.md`](docs/homelab-docs-screenshots/README_SCREENSHOTS.md)
+
+<!-- FEATURE_SCREENSHOTS_END -->
 
 ## License
 
