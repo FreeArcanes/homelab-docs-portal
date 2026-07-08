@@ -1,4 +1,4 @@
-# Homelab Docs Portal
+# Homelab Glue README.md
 
 A public-safe React + Express homelab documentation portal template for tracking assets, services, runbooks, network notes, project/security work, and secret references.
 
