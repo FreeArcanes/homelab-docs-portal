@@ -37,7 +37,11 @@ const EMPTY_DATA = {
   secrets: [],
   networking: [],
   activity: [],
-  projects: []
+  projects: [],
+  projectsSecurity: [],
+  maintenance: [],
+  connectors: [],
+  runbookExecutions: []
 };
 
 const NAV = [
@@ -62,6 +66,18 @@ const NAV = [
   },
   { id: "documents", label: "Documents", icon: FileText },
   { id: "runbooks", label: "Runbooks", icon: Activity },
+  {
+    id: "operations",
+    label: "Operations",
+    icon: Gauge,
+    children: [
+      { id: "monitoring", label: "Health Monitoring" },
+      { id: "maintenance", label: "Maintenance" },
+      { id: "backups", label: "Backup & Restore" },
+      { id: "integrations", label: "Integrations" },
+      { id: "audit", label: "Audit History" }
+    ]
+  },
   { id: "projects-security", label: "Projects/Security", icon: Shield },
   { id: "secret-references", label: "Secret References", icon: KeyRound }
 ];
@@ -130,11 +146,18 @@ const PAGE_META = {
   "secret-references": {
     title: "Secret References",
     subtitle: "References only — store where secrets live, never the secret value itself."
-  }
+  },
+  monitoring: { title: "Health Monitoring", subtitle: "Availability, response time, certificate expiry, and check history." },
+  maintenance: { title: "Maintenance", subtitle: "Recurring work, due dates, ownership, and completion status." },
+  backups: { title: "Backup & Restore", subtitle: "Create, download, validate, and restore portable snapshots." },
+  integrations: { title: "Integrations", subtitle: "Connect and preview external homelab inventory sources." },
+  audit: { title: "Audit History", subtitle: "Trace changes and inspect the operational activity stream." }
 };
 
 function normalizeData(data) {
-  return { ...EMPTY_DATA, ...(data || {}) };
+  const result = { ...EMPTY_DATA, ...(data || {}) };
+  if (!result.projectsSecurity.length) result.projectsSecurity = result.docs.filter(doc => String(doc.category || "").startsWith("Projects/Security"));
+  return result;
 }
 
 function cleanText(value) {
@@ -174,7 +197,9 @@ function collectionForActive(active) {
   if (active === "assets") return "assets";
   if (active === "services") return "services";
   if (active === "runbooks") return "runbooks";
-  if (active === "projects-security") return "docs";
+  if (active === "projects-security") return "projectsSecurity";
+  if (active === "maintenance") return "maintenance";
+  if (active === "integrations") return "connectors";
   if (active === "secret-references") return "secrets";
   if (active === "networking-overview" || active === "physical-port-map") return "networking";
   return "docs";
@@ -220,6 +245,9 @@ function defaultItemForActive(active) {
       notes: ""
     };
   }
+
+  if (active === "maintenance") return { name: "", category: "Maintenance", status: "Planned", dueAt: "", recurrence: "Monthly", owner: "", related: "", notes: "" };
+  if (active === "integrations") return { name: "", type: "Docker", status: "Disabled", url: "", notes: "" };
 
   if (active === "projects-security") {
     return {
@@ -317,9 +345,10 @@ function App() {
       assets: d.assets.length,
       services: d.services.length,
       runbooks: d.runbooks.length,
-      projects: d.docs.filter(doc => String(doc.category || "").startsWith("Projects/Security")).length,
+      projects: d.projectsSecurity.length,
       secrets: d.secrets.length,
       networking: d.networking.length,
+      maintenance: d.maintenance.length,
       activity: d.activity.length,
       activeServices: d.services.filter(s => String(s.status || "").toLowerCase().includes("active")).length,
       readyRunbooks: d.runbooks.filter(r => String(r.displayStatus || r.status || "").toLowerCase().includes("ready")).length
@@ -469,7 +498,7 @@ function Sidebar({ active, setActive, counts, health }) {
         <div className="brand-mark">B</div>
         <div>
           <div className="brand-title">Homelab Docs</div>
-          <div className="brand-subtitle">Homelab KB v2.1</div>
+          <div className="brand-subtitle">Homelab Glue v3.0</div>
         </div>
       </div>
 
@@ -482,8 +511,8 @@ function Sidebar({ active, setActive, counts, health }) {
 
       <div className="system-card">
         <div className="system-title">Runtime</div>
-        <div className="system-row"><strong>LAB-SERVER-01</strong><span>10.0.10.10</span></div>
-        <div className="system-row"><strong>Port</strong><span>8110</span></div>
+          <div className="system-row"><strong>Storage</strong><span>{health?.storage || "local"}</span></div>
+          <div className="system-row"><strong>Version</strong><span>{health?.version || "3.0.0"}</span></div>
         <div className="system-row"><strong>Status</strong><span className="green-text">{status}</span></div>
         <div className="system-divider" />
         <div className="system-title">Coverage</div>
@@ -503,6 +532,7 @@ function NavItem({ item, active, setActive, counts }) {
     documents: counts.docs,
     runbooks: counts.runbooks,
     "projects-security": counts.projects,
+    operations: counts.maintenance,
     "secret-references": counts.secrets
   };
 
@@ -545,7 +575,7 @@ function Page(props) {
   if (active === "services") return <ServicesPage items={data.services || []} query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
   if (active === "runbooks") return <RunbooksPage items={data.runbooks || []} query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
   if (active === "documents") return <DocumentsPage items={data.docs || []} collection="docs" query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
-  if (active === "projects-security") return <ProjectsSecurityPage items={(data.docs || []).filter(d => String(d.category || "").startsWith("Projects/Security"))} query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
+  if (active === "projects-security") return <ProjectsSecurityPage items={data.projectsSecurity || []} query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
   if (active === "secret-references") return <SecretReferencesPage items={data.secrets || []} query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
   if (active === "networking-overview") return <NetworkingOverview data={data} query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
   if (active === "physical-port-map") return <PhysicalPortMap />;
@@ -556,6 +586,7 @@ function Page(props) {
   if (active === "wireless") return <UniFiLivePage section="wireless" />;
   if (active === "networks-vlans") return <UniFiLivePage section="networks" />;
   if (active === "raw-data") return <UniFiLivePage section="raw" />;
+  if (["monitoring", "maintenance", "backups", "integrations", "audit"].includes(active)) return <OperationsPage section={active} data={data} onEdit={onEdit} onDelete={onDelete} />;
 
   return <EmptyState title="Page coming soon" message="This section is ready for future expansion." />;
 }
@@ -592,14 +623,14 @@ function Dashboard({ data, counts, health, query }) {
       <div className="dashboard-hero">
         <div>
           <div className="eyebrow">Command Center</div>
-          <h2>LAB-SERVER-01 Documentation Portal</h2>
+          <h2>Homelab Glue Operations Portal</h2>
           <p>
             A polished, self-hosted knowledge base for your homelab: infrastructure inventory,
             Docker services, networking, runbooks, security projects, and secret references.
           </p>
           <div className="hero-chips">
-            <span>Demo host: 10.0.10.10</span>
-            <span>Port: 8110</span>
+            <span>{health?.storage || "SQLite"} storage</span>
+            <span>Auth: {health?.auth || "local"}</span>
             <span>{health?.ok ? "API healthy" : "API local/offline"}</span>
           </div>
         </div>
@@ -617,9 +648,9 @@ function Dashboard({ data, counts, health, query }) {
         <section className="panel elevated">
           <PanelTitle eyebrow="Operations" title="Core Runtime" />
           <div className="runtime-grid">
-            <RuntimeRow label="Primary Host" value="LAB-SERVER-01" detail="Ubuntu Docker host" />
-            <RuntimeRow label="Example IP" value="10.0.10.10" detail="Server VLAN" />
-            <RuntimeRow label="Docs Path" value="/opt/homelab-docs" detail="React/Vite + Express" />
+            <RuntimeRow label="Storage" value={health?.storage || "Local"} detail="Atomic persistent records" />
+            <RuntimeRow label="Authentication" value={health?.auth || "Off"} detail="Admin and read-only roles" />
+            <RuntimeRow label="Version" value={health?.version || "3.0.0"} detail="React/Vite + Express" />
             <RuntimeRow label="API" value={health?.ok ? "Healthy" : "Unknown"} detail={health?.time || "Refresh to re-check"} />
           </div>
         </section>
@@ -686,7 +717,7 @@ function Dashboard({ data, counts, health, query }) {
             ["Networking", "Complete", "Manual physical map plus live UniFi-ready pages."],
             ["Runbooks", "Complete", "Structured runbook view with steps, impact, and notes."],
             ["Deploy package", "Complete", "Ready to zip, copy back to /opt, and rebuild."],
-            ["Future", "Next", "Add auth/SSO and stronger role-based edit controls when needed."]
+            ["Operations layer", "Complete", "Auth, SQLite, monitoring, maintenance, backups, revisions, notifications, and connectors."]
           ].map(([name, status, note]) => (
             <div className="migration-card" key={name}>
               <div className="migration-card-head">
@@ -909,6 +940,12 @@ function RunbooksPage(props) {
 
 function RunbookDetail({ item, onBack, onEdit, onDelete }) {
   const steps = Array.isArray(item.steps) ? item.steps : [];
+  const [completed, setCompleted] = useState([]);
+  const [recorded, setRecorded] = useState(false);
+  async function recordExecution() {
+    await api("/api/runbookExecutions", { method: "POST", body: JSON.stringify({ runbookId: item.id, name: `${item.title || item.id} execution`, status: completed.length === steps.length ? "Complete" : "Partial", completedSteps: completed, totalSteps: steps.length, executedAt: new Date().toISOString() }) });
+    setRecorded(true);
+  }
   return (
     <section className="detail-page">
       <DetailHeader title={item.displayName || item.title || "Runbook"} subtitle={item.category || item.displayCategory || "Operations"} onBack={onBack} actions={<HeaderActions collection="runbooks" item={item} onEdit={onEdit} onDelete={onDelete} />} />
@@ -916,12 +953,15 @@ function RunbookDetail({ item, onBack, onEdit, onDelete }) {
         <article className="panel elevated detail-main">
           <PanelTitle eyebrow="Procedure" title="Execution Steps" />
           {steps.length ? (
-            <ol className="step-list">
-              {steps.map((step, idx) => <li key={`${idx}-${step}`}>{step}</li>)}
+            <ol className="step-list checklist">
+              {steps.map((step, idx) => <li key={`${idx}-${step}`}><label><input type="checkbox" checked={completed.includes(idx)} onChange={() => setCompleted(value => value.includes(idx) ? value.filter(n => n !== idx) : [...value, idx])} />{step}</label></li>)}
             </ol>
           ) : (
             <RenderedBody value={item.body || item.summary || "No steps documented."} />
           )}
+          {!!steps.length && <button className="btn" onClick={recordExecution} disabled={recorded}>{recorded ? "Execution recorded" : "Record execution"}</button>}
+          {item.validation && <p><strong>Validation:</strong> {item.validation}</p>}
+          {item.rollback && <p><strong>Rollback:</strong> {item.rollback}</p>}
         </article>
         <aside className="panel elevated detail-side">
           <PanelTitle eyebrow="Runbook" title="Metadata" />
@@ -1217,6 +1257,7 @@ function TopologyNodes({ data }) {
 }
 
 function SimpleTable({ rows, columns }) {
+  columns = columns.map(column => Array.isArray(column) ? column[0] : column);
   return (
     <section className="panel elevated table-panel">
       <div className="table-wrap">
@@ -1232,6 +1273,79 @@ function SimpleTable({ rows, columns }) {
       </div>
     </section>
   );
+}
+
+function OperationsPage({ section, data, onEdit, onDelete }) {
+  const [remote, setRemote] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setError("");
+    try {
+      if (section === "monitoring") setRemote(await api("/api/monitoring"));
+      if (section === "backups") setRemote(await api("/api/backups"));
+      if (section === "integrations") setRemote(await api("/api/integrations"));
+      if (section === "maintenance") setRemote(await api("/api/maintenance-due?days=3650"));
+      if (section === "audit") setRemote(data.activity || []);
+    } catch (err) { setError(err.message); }
+  }
+
+  useEffect(() => { load(); }, [section]);
+
+  async function action(path, options = {}) {
+    setBusy(true); setError("");
+    try { await api(path, { method: "POST", ...options }); await load(); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+
+  if (error) return <ErrorPanel message={error} />;
+  if (remote === null) return <LoadingPanel />;
+
+  if (section === "monitoring") return (
+    <section className="panel elevated">
+      <PanelTitle eyebrow="Live checks" title="Service Health"><button className="btn" disabled={busy} onClick={() => action("/api/monitoring/check", { body: "{}" })}><RefreshCw size={16} />Check now</button></PanelTitle>
+      <SimpleTable rows={remote.latest || []} columns={[
+        ["serviceId", "Service"], ["ok", "Online", value => value ? "Yes" : "No"], ["statusCode", "HTTP"], ["responseMs", "Latency", value => value == null ? "—" : `${value} ms`], ["tlsExpiresAt", "TLS expires", formatDate], ["checkedAt", "Checked", formatDate]
+      ]} />
+      {!(remote.latest || []).length && <EmptyState title="No checks yet" message="Give services a URL or health URL, then run the first check." />}
+    </section>
+  );
+
+  if (section === "maintenance") return (
+    <section className="panel elevated">
+      <PanelTitle eyebrow="Schedule" title="Maintenance Calendar" />
+      <div className="cards">{remote.map(item => <article className="doc-card" key={item.id}>
+        <div className="doc-card-head"><div><div className="doc-title">{item.name}</div><div className="doc-meta">{item.recurrence || "One-time"} · {item.owner || "Unassigned"}</div></div><span className={badgeClass(item.overdue ? "overdue" : item.status)}>{item.overdue ? "Overdue" : item.status}</span></div>
+        <p>Due {formatDate(item.dueAt)} · {item.related || "No linked system"}</p><CardActions collection="maintenance" item={item} onEdit={onEdit} onDelete={onDelete} />
+      </article>)}</div>
+      {!remote.length && <EmptyState title="Nothing scheduled" message="Use New Entry to schedule patching, backup tests, certificate renewals, and rotations." />}
+    </section>
+  );
+
+  if (section === "backups") return (
+    <section className="panel elevated">
+      <PanelTitle eyebrow="Portable data" title="Backup & Restore"><div className="detail-actions"><a className="btn ghost" href="/api/export">Download export</a><button className="btn" disabled={busy} onClick={() => action("/api/backups")}><Database size={16} />Create backup</button></div></PanelTitle>
+      <ImportControl busy={busy} onImport={file => file.text().then(text => action("/api/import", { body: JSON.stringify({ data: JSON.parse(text), replace: true }) }))} />
+      <SimpleTable rows={remote} columns={[["name", "Backup"], ["size", "Size", value => `${Math.ceil(value / 1024)} KB`], ["createdAt", "Created", formatDate]]} />
+    </section>
+  );
+
+  if (section === "integrations") return (
+    <section className="panel elevated">
+      <PanelTitle eyebrow="Discovery" title="Connector Catalog" />
+      <div className="hero-chips">{remote.available.map(name => <span key={name}>{name}</span>)}</div>
+      <div className="cards">{remote.configured.map(item => <article className="doc-card" key={item.id}><div className="doc-title">{item.name}</div><p>{item.type} · {item.lastSyncStatus || item.status || "Not synced"}</p><div className="detail-actions"><button className="btn ghost" onClick={() => action(`/api/integrations/${encodeURIComponent(item.id)}/sync`)}>Preview sync</button><CardActions collection="connectors" item={item} onEdit={onEdit} onDelete={onDelete} /></div></article>)}</div>
+      {!remote.configured.length && <EmptyState title="No connectors configured" message="Use New Entry to add an API URL, then preview its discovery payload before importing anything." />}
+    </section>
+  );
+
+  return <section className="panel elevated"><PanelTitle eyebrow="Accountability" title="Activity Stream" /><SimpleTable rows={remote} columns={[["at", "When", formatDate], ["actor", "Actor"], ["action", "Action"], ["collection", "Collection"], ["itemName", "Item"]]} /></section>;
+}
+
+function ImportControl({ onImport, busy }) {
+  return <label className="import-control">Restore JSON snapshot<input type="file" accept="application/json,.json" disabled={busy} onChange={event => event.target.files?.[0] && window.confirm("Replace current data with this snapshot? A safety backup will be created first.") && onImport(event.target.files[0])} /></label>;
 }
 
 function DetailView({ title, collection, item, onBack, onEdit, onDelete }) {
@@ -1370,6 +1484,13 @@ function EditorModal({ editor, saving, onClose, onSave }) {
           <Field label="Rotation" value={item.rotation || ""} onChange={v => setField("rotation", v)} placeholder="Every 6 months" />
           <Field label="Related" value={item.related || ""} onChange={v => setField("related", v)} placeholder="Related system" />
           <Field label="Image" value={item.image || ""} onChange={v => setField("image", v)} placeholder="Docker image" />
+          <Field label="Health URL" value={item.healthUrl || ""} onChange={v => setField("healthUrl", v)} placeholder="Optional dedicated health endpoint" />
+          <Field label="Due At" value={item.dueAt || ""} onChange={v => setField("dueAt", v)} placeholder="2026-12-31T09:00:00Z" />
+          <Field label="Recurrence" value={item.recurrence || ""} onChange={v => setField("recurrence", v)} placeholder="Monthly, quarterly, yearly" />
+          <Field label="Asset ID" value={item.assetId || ""} onChange={v => setField("assetId", v)} placeholder="Linked asset ID" />
+          <Field label="Service IDs" value={item.serviceIds || ""} onChange={v => setField("serviceIds", v)} placeholder="Comma-separated IDs" />
+          <Field label="Runbook IDs" value={item.runbookIds || ""} onChange={v => setField("runbookIds", v)} placeholder="Comma-separated IDs" />
+          <Field label="Secret Reference IDs" value={item.secretIds || ""} onChange={v => setField("secretIds", v)} placeholder="References only" />
         </div>
 
         <Field label="Tags" value={tagsText} onChange={setTagsText} placeholder="comma, separated, tags" />
@@ -1379,12 +1500,14 @@ function EditorModal({ editor, saving, onClose, onSave }) {
           <textarea className="small-textarea" value={item.summary || ""} onChange={e => setField("summary", e.target.value)} placeholder="Short summary" />
         </label>
 
-        {editor.collection === "runbooks" && (
+        {editor.collection === "runbooks" && (<>
           <label className="field-label">
             Steps
             <textarea className="body-editor compact-editor" value={stepsText} onChange={e => setStepsText(e.target.value)} placeholder="One step per line" />
           </label>
-        )}
+          <Field label="Rollback" value={item.rollback || ""} onChange={v => setField("rollback", v)} placeholder="Rollback procedure" />
+          <Field label="Validation" value={item.validation || ""} onChange={v => setField("validation", v)} placeholder="Success criteria" />
+        </>)}
 
         <label className="field-label">
           Body / Notes / Details
@@ -1434,7 +1557,6 @@ function stripHtml(value) {
 function renderBody(body) {
   if (!body) return "<p>No documentation body yet.</p>";
   const text = String(body);
-  if (text.trim().startsWith("<")) return text;
   return text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

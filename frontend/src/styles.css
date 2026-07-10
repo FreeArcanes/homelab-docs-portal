@@ -439,6 +439,9 @@ a { color: inherit; }
 
 .step-list { margin: 0; padding-left: 1.25rem; display: grid; gap: 11px; color: #d8e1e7; line-height: 1.55; }
 .step-list li { padding-left: 6px; }
+.step-list.checklist { list-style: none; padding-left: 0; }
+.step-list.checklist label { display: flex; align-items: flex-start; gap: 10px; }
+.step-list.checklist input { width: auto; margin-top: 4px; }
 
 .network-stats { display: grid; grid-template-columns: repeat(4, minmax(90px, 1fr)); gap: 10px; min-width: min(460px, 100%); }
 .network-stat { padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,0.04); }
@@ -512,6 +515,8 @@ textarea { resize: vertical; min-height: 92px; line-height: 1.45; }
 .body-editor { min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9rem; }
 .compact-editor { min-height: 130px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.import-control { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 14px 0; padding: 14px; border: 1px dashed var(--line-strong); border-radius: 14px; color: var(--muted); font-weight: 800; }
+.import-control input { width: auto; }
 
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 70; display: flex; gap: 9px; align-items: center; padding: 12px 14px; color: var(--green); border: 1px solid rgba(159,245,189,0.24); border-radius: 16px; background: rgba(9, 21, 15, 0.96); box-shadow: var(--shadow); font-weight: 900; }
 

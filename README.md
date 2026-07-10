@@ -12,6 +12,11 @@ A public-safe React + Express homelab documentation portal template for tracking
 - File upload support for private deployments
 - Demo topology and demo inventory
 - Docker Compose deployment
+- SQLite storage with automatic JSON migration and revision history
+- Optional local authentication with admin and read-only roles
+- Service health checks, latency history, and TLS expiration tracking
+- Maintenance scheduling, portable backup/restore, and webhook notifications
+- Relationship fields and connector sync previews for common homelab platforms
 
 ## Public-safety notice
 
@@ -84,6 +89,24 @@ Collections:
 - `activity`
 - `projects`
 - `projectsSecurity`
+- `maintenance`
+- `connectors`
+
+## Homelab Glue 3 operations
+
+The legacy `backend/data/data.json` file is imported automatically on first start. Live data is then stored in `backend/data/homelab-glue.sqlite`. Keep both the database and `backend/data/backups/` private.
+
+Enable local authentication in `.env`:
+
+```env
+AUTH_MODE=basic
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=use-a-long-unique-password
+VIEWER_USERNAME=viewer
+VIEWER_PASSWORD=another-long-unique-password
+```
+
+The optional `API_KEY` supports automation through the `X-API-Key` header. Configure `NOTIFICATION_WEBHOOK_URL` for service status-change messages. Operations pages provide manual health checks, maintenance tracking, JSON exports, safety backups before restore, connector previews, and audit history.
 
 ## Secret references
 

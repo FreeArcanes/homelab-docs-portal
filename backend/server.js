@@ -8,6 +8,10 @@ import fs from "fs/promises";
 import { existsSync } from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
+import crypto from "crypto";
+import tls from "tls";
+import { createStorage } from "./storage.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +22,7 @@ const PORT = process.env.PORT || 8110;
 const DATA_FILE = path.join(__dirname, "data", "data.json");
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const FRONTEND_DIST = path.join(__dirname, "..", "frontend", "dist");
+const storage = createStorage({ dataDir: path.dirname(DATA_FILE), legacyFile: DATA_FILE });
 
 await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
 await fs.mkdir(UPLOAD_DIR, { recursive: true });
@@ -26,30 +31,13 @@ app.use(helmet({
   contentSecurityPolicy: false
 }));
 
-app.use(cors());
+const allowedOrigins = String(process.env.CORS_ORIGINS || "").split(",").map(v => v.trim()).filter(Boolean);
+app.use(cors(allowedOrigins.length ? { origin: allowedOrigins, credentials: true } : {}));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use(morgan("combined"));
 
-async function readData() {
-  try {
-    const raw = await fs.readFile(DATA_FILE, "utf8");
-    return ensureShape(JSON.parse(raw));
-  } catch {
-    return {
-      meta: {},
-      docs: [],
-      assets: [],
-      services: [],
-      runbooks: [],
-      projectsSecurity: [],
-      secrets: [],
-      networking: [],
-      activity: [],
-      projects: []
-    };
-  }
-}
+async function readData() { return ensureShape(storage.snapshot()); }
 
 function ensureShape(data) {
   return {
@@ -63,6 +51,9 @@ function ensureShape(data) {
     networking: [],
     activity: [],
     projects: [],
+    maintenance: [],
+    connectors: [],
+    runbookExecutions: [],
     ...(data || {})
   };
 }
@@ -82,26 +73,6 @@ function addActivity(data, action, collection, item = {}, req = null) {
   data.activity = data.activity.slice(0, 250);
 }
 
-async function writeData(data) {
-  data = ensureShape(data);
-  data.meta = {
-    ...(data.meta || {}),
-    app: "Homelab Docs Portal",
-    polishedVersion: "2.1.0",
-    lastWriteAt: new Date().toISOString()
-  };
-
-  const backupDir = path.join(__dirname, "data", "backups");
-  await fs.mkdir(backupDir, { recursive: true });
-
-  if (existsSync(DATA_FILE)) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    await fs.copyFile(DATA_FILE, path.join(backupDir, `data-${stamp}.json`));
-  }
-
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
-}
-
 function normalizeCollection(name) {
   const allowed = new Set([
     "docs",
@@ -112,20 +83,68 @@ function normalizeCollection(name) {
     "secrets",
     "networking",
     "activity",
-    "projects"
+    "projects",
+    "maintenance",
+    "connectors",
+    "runbookExecutions"
   ]);
 
   if (!allowed.has(name)) return null;
   return name;
 }
 
+function safeEqual(left, right) {
+  const a = Buffer.from(String(left || ""));
+  const b = Buffer.from(String(right || ""));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function authenticate(req, res, next) {
+  const mode = String(process.env.AUTH_MODE || "off").toLowerCase();
+  if (mode === "off" || req.path === "/health") {
+    req.user = { name: "local", role: "admin" };
+    return next();
+  }
+  const apiKey = req.get("x-api-key");
+  if (process.env.API_KEY && safeEqual(apiKey, process.env.API_KEY)) {
+    req.user = { name: "api-key", role: "admin" };
+    return next();
+  }
+  const encoded = req.get("authorization")?.match(/^Basic (.+)$/i)?.[1];
+  let username = ""; let password = "";
+  try { [username, password] = Buffer.from(encoded || "", "base64").toString("utf8").split(":"); } catch {}
+  const admin = safeEqual(username, process.env.ADMIN_USERNAME) && safeEqual(password, process.env.ADMIN_PASSWORD);
+  const viewer = process.env.VIEWER_USERNAME && safeEqual(username, process.env.VIEWER_USERNAME) && safeEqual(password, process.env.VIEWER_PASSWORD);
+  if (admin || viewer) {
+    req.user = { name: username, role: admin ? "admin" : "viewer" };
+    return next();
+  }
+  res.set("WWW-Authenticate", 'Basic realm="Homelab Glue"');
+  return res.status(401).json({ error: "Authentication required" });
+}
+
+app.use("/api", rateLimit({ windowMs: 60_000, limit: Number(process.env.RATE_LIMIT || 240), standardHeaders: true, legacyHeaders: false }));
+app.use("/api", authenticate);
+
+function requireEditor(req, res, next) {
+  if (req.user?.role === "viewer") return res.status(403).json({ error: "Read-only account" });
+  next();
+}
+
+function validateItem(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return "A JSON object is required";
+  if (JSON.stringify(body).length > 1_000_000) return "Entry is too large";
+  if (body.id && !/^[a-zA-Z0-9._:-]{1,160}$/.test(String(body.id))) return "Invalid id";
+  return null;
+}
+
 app.get("/api/health", async (req, res) => {
   res.json({
     ok: true,
-    app: "Homelab Docs Portal",
-    polishedVersion: "2.1.0",
-    host: "demo-host",
-    exampleIp: "10.0.10.10",
+    app: "Homelab Glue",
+    version: "3.0.0",
+    storage: "sqlite",
+    auth: String(process.env.AUTH_MODE || "off").toLowerCase(),
     time: new Date().toISOString()
   });
 });
@@ -135,94 +154,197 @@ app.get("/api/data", async (req, res) => {
   res.json(data);
 });
 
+app.get("/api/export", (req, res) => {
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.set("Content-Disposition", `attachment; filename="homelab-glue-${stamp}.json"`);
+  res.json(storage.snapshot());
+});
+
+app.post("/api/import", requireEditor, async (req, res) => {
+  const snapshot = req.body?.data || req.body;
+  if (!snapshot || typeof snapshot !== "object") return res.status(400).json({ error: "Invalid snapshot" });
+  const backupDir = path.join(__dirname, "data", "backups");
+  await fs.mkdir(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  await fs.writeFile(path.join(backupDir, `pre-import-${stamp}.json`), JSON.stringify(storage.snapshot(), null, 2));
+  storage.importSnapshot(snapshot, { replace: Boolean(req.body?.replace) });
+  res.json({ ok: true, collections: storage.collections });
+});
+
+app.get("/api/backups", async (req, res) => {
+  const backupDir = path.join(__dirname, "data", "backups");
+  await fs.mkdir(backupDir, { recursive: true });
+  const files = (await fs.readdir(backupDir)).filter(name => name.endsWith(".json"));
+  const result = await Promise.all(files.map(async name => {
+    const stat = await fs.stat(path.join(backupDir, name));
+    return { name, size: stat.size, createdAt: stat.mtime.toISOString() };
+  }));
+  res.json(result.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+});
+
+app.post("/api/backups", requireEditor, async (req, res) => {
+  const backupDir = path.join(__dirname, "data", "backups");
+  await fs.mkdir(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const name = `manual-${stamp}.json`;
+  await fs.writeFile(path.join(backupDir, name), JSON.stringify(storage.snapshot(), null, 2));
+  const retention = Math.max(1, Number(process.env.BACKUP_RETENTION || 30));
+  const files = (await fs.readdir(backupDir)).filter(file => file.endsWith(".json")).sort().reverse();
+  await Promise.all(files.slice(retention).map(file => fs.unlink(path.join(backupDir, file))));
+  res.status(201).json({ ok: true, name });
+});
+
+app.get("/api/revisions/:collection/:id", (req, res) => {
+  const collection = normalizeCollection(req.params.collection);
+  if (!collection) return res.status(404).json({ error: "Unknown collection" });
+  res.json(storage.revisions(collection, req.params.id));
+});
+
+app.post("/api/revisions/:collection/:id/:revisionId/restore", requireEditor, (req, res) => {
+  const collection = normalizeCollection(req.params.collection);
+  if (!collection) return res.status(404).json({ error: "Unknown collection" });
+  const revision = storage.revisions(collection, req.params.id).find(r => String(r.revisionId) === String(req.params.revisionId));
+  if (!revision?.data) return res.status(404).json({ error: "Revision not found" });
+  res.json(storage.save(collection, revision.data, "restored", req.user.name));
+});
+
+function certificateExpiry(url) {
+  if (url.protocol !== "https:") return Promise.resolve(null);
+  return new Promise(resolve => {
+    const socket = tls.connect({ host: url.hostname, port: Number(url.port || 443), servername: url.hostname, rejectUnauthorized: false, timeout: 5000 }, () => {
+      const validTo = socket.getPeerCertificate()?.valid_to;
+      socket.end();
+      resolve(validTo ? new Date(validTo).toISOString() : null);
+    });
+    socket.on("timeout", () => { socket.destroy(); resolve(null); });
+    socket.on("error", () => resolve(null));
+  });
+}
+
+async function notify(event) {
+  const webhook = process.env.NOTIFICATION_WEBHOOK_URL;
+  if (!webhook) return;
+  try {
+    await fetch(webhook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: `[Homelab Glue] ${event.message}`, ...event }), signal: AbortSignal.timeout(5000) });
+  } catch (error) { console.warn(`Notification failed: ${error.message}`); }
+}
+
+async function checkService(service) {
+  const checkedAt = new Date().toISOString();
+  const started = Date.now();
+  let result;
+  try {
+    const url = new URL(service.healthUrl || service.url);
+    const response = await fetch(url, { method: service.healthMethod || "GET", redirect: "follow", signal: AbortSignal.timeout(Number(service.healthTimeoutMs || 8000)) });
+    result = { serviceId: service.id, ok: response.ok, statusCode: response.status, responseMs: Date.now() - started, tlsExpiresAt: await certificateExpiry(url), error: response.ok ? null : `HTTP ${response.status}`, checkedAt };
+  } catch (error) {
+    result = { serviceId: service.id, ok: false, statusCode: null, responseMs: Date.now() - started, tlsExpiresAt: null, error: error.message, checkedAt };
+  }
+  const previous = storage.checks(service.id)[0];
+  storage.recordCheck(result);
+  if (previous && previous.ok !== result.ok) await notify({ type: "service-status", serviceId: service.id, message: `${service.name || service.id} is now ${result.ok ? "online" : "offline"}` });
+  return result;
+}
+
+app.get("/api/monitoring", (req, res) => res.json({ latest: storage.checks(), enabled: String(process.env.MONITORING_ENABLED || "true") === "true" }));
+app.get("/api/monitoring/:serviceId/history", (req, res) => res.json(storage.checks(req.params.serviceId)));
+app.post("/api/monitoring/check", requireEditor, async (req, res) => {
+  const services = storage.list("services").filter(service => (req.body?.serviceId ? service.id === req.body.serviceId : true) && (service.healthUrl || service.url));
+  const results = await Promise.all(services.map(checkService));
+  res.json(results);
+});
+
+app.get("/api/maintenance-due", (req, res) => {
+  const now = Date.now();
+  const horizon = now + Number(req.query.days || 30) * 86400000;
+  const items = storage.list("maintenance").map(item => ({ ...item, overdue: item.dueAt ? new Date(item.dueAt).getTime() < now && item.status !== "Complete" : false }))
+    .filter(item => !item.dueAt || new Date(item.dueAt).getTime() <= horizon);
+  res.json(items);
+});
+
+app.get("/api/integrations", (req, res) => {
+  const configured = storage.list("connectors");
+  res.json({
+    available: ["UniFi", "Docker", "Proxmox", "TrueNAS", "Home Assistant", "Pi-hole", "AdGuard Home", "Tailscale", "Uptime Kuma", "Portainer"],
+    configured,
+    unifi: { enabled: unifiEnabled() }
+  });
+});
+
+app.post("/api/integrations/:id/sync", requireEditor, async (req, res) => {
+  const connector = storage.get("connectors", req.params.id);
+  if (!connector) return res.status(404).json({ error: "Connector not found" });
+  if (!connector.url) return res.status(400).json({ error: "Connector URL is required" });
+  try {
+    const tokenKey = `CONNECTOR_TOKEN_${String(connector.id).replace(/[^a-zA-Z0-9]/g, "_").toUpperCase()}`;
+    const token = process.env[tokenKey];
+    const response = await fetch(connector.url, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(10000) });
+    const payload = await response.json();
+    const updated = storage.save("connectors", { ...connector, lastSyncAt: new Date().toISOString(), lastSyncStatus: response.ok ? "success" : "failed", discoveredCount: Array.isArray(payload) ? payload.length : null }, "synced", req.user.name);
+    res.json({ connector: updated, preview: payload });
+  } catch (error) { res.status(502).json({ error: error.message }); }
+});
+
+const allowedUploadTypes = new Set(["application/pdf", "text/plain", "text/markdown", "image/png", "image/jpeg", "image/webp"]);
+const upload = multer({
+  dest: UPLOAD_DIR,
+  limits: { fileSize: Number(process.env.UPLOAD_MAX_BYTES || 10 * 1024 * 1024), files: 1 },
+  fileFilter: (req, file, callback) => callback(allowedUploadTypes.has(file.mimetype) ? null : new Error("Unsupported file type"), allowedUploadTypes.has(file.mimetype))
+});
+
+app.post("/api/uploads", requireEditor, upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  const extension = path.extname(req.file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, "");
+  const finalName = `${crypto.randomUUID()}${extension}`;
+  await fs.rename(req.file.path, path.join(UPLOAD_DIR, finalName));
+  res.status(201).json({ filename: finalName, originalName: path.basename(req.file.originalname), url: `/uploads/${finalName}` });
+});
+
 app.get("/api/:collection", async (req, res) => {
   const collection = normalizeCollection(req.params.collection);
   if (!collection) return res.status(404).json({ error: "Unknown collection" });
 
-  const data = await readData();
-  res.json(data[collection] || []);
+  res.json(storage.list(collection));
 });
 
-app.post("/api/:collection", async (req, res) => {
+app.post("/api/:collection", requireEditor, async (req, res) => {
   const collection = normalizeCollection(req.params.collection);
   if (!collection) return res.status(404).json({ error: "Unknown collection" });
 
-  const data = await readData();
-  data[collection] = Array.isArray(data[collection]) ? data[collection] : [];
-
-  const item = {
+  const validationError = validateItem(req.body);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const item = storage.save(collection, {
     id: req.body.id || `${collection}-${Date.now()}`,
     createdAt: req.body.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
     ...req.body
-  };
-
-  data[collection].push(item);
-  addActivity(data, "created", collection, item, req);
-  await writeData(data);
+  }, "created", req.user.name);
+  storage.save("activity", { id: `activity-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`, action: "created", collection, itemId: item.id, itemName: item.title || item.name || item.id, actor: req.user.name, at: new Date().toISOString() }, "created", req.user.name);
 
   res.status(201).json(item);
 });
 
-app.put("/api/:collection/:id", async (req, res) => {
+app.put("/api/:collection/:id", requireEditor, async (req, res) => {
   const collection = normalizeCollection(req.params.collection);
   if (!collection) return res.status(404).json({ error: "Unknown collection" });
 
-  const data = await readData();
-  data[collection] = Array.isArray(data[collection]) ? data[collection] : [];
-
-  const idx = data[collection].findIndex(item => String(item.id) === String(req.params.id));
-  if (idx === -1) return res.status(404).json({ error: "Item not found" });
-
-  data[collection][idx] = {
-    ...data[collection][idx],
-    ...req.body,
-    updatedAt: new Date().toISOString()
-  };
-
-  addActivity(data, "updated", collection, data[collection][idx], req);
-  await writeData(data);
-  res.json(data[collection][idx]);
+  const validationError = validateItem(req.body);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const existing = storage.get(collection, req.params.id);
+  if (!existing) return res.status(404).json({ error: "Item not found" });
+  const item = storage.save(collection, { ...existing, ...req.body, id: existing.id }, "updated", req.user.name);
+  storage.save("activity", { id: `activity-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`, action: "updated", collection, itemId: item.id, itemName: item.title || item.name || item.id, actor: req.user.name, at: new Date().toISOString() }, "created", req.user.name);
+  res.json(item);
 });
 
-app.delete("/api/:collection/:id", async (req, res) => {
+app.delete("/api/:collection/:id", requireEditor, async (req, res) => {
   const collection = normalizeCollection(req.params.collection);
   if (!collection) return res.status(404).json({ error: "Unknown collection" });
 
-  const data = await readData();
-  data[collection] = Array.isArray(data[collection]) ? data[collection] : [];
-
-  const before = data[collection].length;
-  const deletedItem = data[collection].find(item => String(item.id) === String(req.params.id));
-  data[collection] = data[collection].filter(item => String(item.id) !== String(req.params.id));
-
-  if (data[collection].length === before) {
-    return res.status(404).json({ error: "Item not found" });
-  }
-
-  addActivity(data, "deleted", collection, deletedItem || { id: req.params.id }, req);
-  await writeData(data);
+  const deletedItem = storage.get(collection, req.params.id);
+  if (!storage.remove(collection, req.params.id, req.user.name)) return res.status(404).json({ error: "Item not found" });
+  storage.save("activity", { id: `activity-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`, action: "deleted", collection, itemId: req.params.id, itemName: deletedItem?.title || deletedItem?.name || req.params.id, actor: req.user.name, at: new Date().toISOString() }, "created", req.user.name);
   res.json({ ok: true });
 });
-
-const upload = multer({ dest: UPLOAD_DIR });
-
-app.post("/api/uploads", upload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
-  const safeOriginal = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const finalName = `${Date.now()}-${safeOriginal}`;
-  const finalPath = path.join(UPLOAD_DIR, finalName);
-
-  await fs.rename(req.file.path, finalPath);
-
-  res.status(201).json({
-    filename: finalName,
-    originalName: req.file.originalname,
-    url: `/uploads/${finalName}`
-  });
-});
-
 
 /* OPTIONAL_NETWORK_CONTROLLER_CONNECTOR */
 function unifiEnabled() {
@@ -541,7 +663,15 @@ app.get("/api/unifi/summary", async (req, res) => {
 });
 
 
-app.use("/uploads", express.static(UPLOAD_DIR));
+app.use("/uploads", authenticate, express.static(UPLOAD_DIR, { setHeaders: res => {
+  res.setHeader("Content-Disposition", "attachment");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+} }));
+
+app.use((error, req, res, next) => {
+  if (!error) return next();
+  res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error: error.message });
+});
 
 if (existsSync(FRONTEND_DIST)) {
   app.use(express.static(FRONTEND_DIST));
@@ -553,6 +683,11 @@ if (existsSync(FRONTEND_DIST)) {
 
     res.sendFile(path.join(FRONTEND_DIST, "index.html"));
   });
+}
+
+const monitorInterval = Number(process.env.MONITORING_INTERVAL_SECONDS || 300) * 1000;
+if (String(process.env.MONITORING_ENABLED || "true") === "true" && monitorInterval >= 30000) {
+  setInterval(() => Promise.all(storage.list("services").filter(service => service.healthUrl || service.url).map(checkService)).catch(error => console.warn(`Scheduled checks failed: ${error.message}`)), monitorInterval).unref();
 }
 
 app.listen(PORT, "0.0.0.0", () => {
