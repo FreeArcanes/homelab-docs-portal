@@ -310,7 +310,7 @@ async function api(path, options = {}) {
 }
 
 function App() {
-  const [active, setActive] = useState("dashboard");
+  const [active, setActive] = useState(() => window.location.hash.slice(1) || "dashboard");
   const [data, setData] = useState(EMPTY_DATA);
   const [health, setHealth] = useState(null);
   const [query, setQuery] = useState("");
@@ -338,6 +338,12 @@ function App() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const onHashChange = () => setActive(window.location.hash.slice(1) || "dashboard");
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   const counts = useMemo(() => {
     const d = normalizeData(data);
     return {
@@ -359,6 +365,7 @@ function App() {
 
   function switchPage(id) {
     setActive(id);
+    window.history.replaceState(null, "", `#${id}`);
     setSelectedItem(null);
   }
 

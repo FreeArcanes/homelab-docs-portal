@@ -1,22 +1,28 @@
-# Homelab Glue README.md
+# Homelab Glue
 
-A public-safe React + Express homelab documentation portal template for tracking assets, services, runbooks, network notes, project/security work, and secret references.
+A self-hosted operations and documentation portal for keeping a homelab understandable, maintainable, and recoverable. Homelab Glue combines inventory, service health, runbooks, maintenance, networking, backups, integrations, and security references in one public-safe React + Express application.
+
+![Homelab Glue 3.0 Dashboard](docs/homelab-docs-screenshots/v3-dashboard.png)
 
 
-## Features
+## What's new in 3.0
 
-- Dark-mode React/Vite frontend
-- Express backend with JSON-file storage
-- CRUD flows for assets, services, documents, runbooks, networking, project/security notes, and secret references
-- Optional network-controller connector placeholders
-- File upload support for private deployments
-- Demo topology and demo inventory
-- Docker Compose deployment
-- SQLite storage with automatic JSON migration and revision history
-- Optional local authentication with admin and read-only roles
-- Service health checks, latency history, and TLS expiration tracking
-- Maintenance scheduling, portable backup/restore, and webhook notifications
-- Relationship fields and connector sync previews for common homelab platforms
+Homelab Glue 3.0 moves beyond a documentation-only portal and adds an operations layer:
+
+- **SQLite persistence:** atomic writes, indexed records, automatic migration from the legacy JSON seed, and per-record revision history.
+- **Service monitoring:** manual and scheduled availability checks, HTTP status, response time, TLS certificate expiration, and bounded history.
+- **Maintenance planning:** recurring operational work, due dates, ownership, completion state, and overdue visibility.
+- **Backup and restore:** portable JSON exports, retained safety backups, validated restore workflows, and automatic pre-import snapshots.
+- **Authentication and roles:** optional local Basic authentication, administrator and read-only accounts, plus API-key access for automation.
+- **Auditability:** actor-aware activity records, revision inspection, and restoration of earlier record versions.
+- **Improved runbooks:** executable checklists, validation and rollback guidance, linked infrastructure, and execution records.
+- **Connected records:** relationships between services, assets, runbooks, projects, and secret references.
+- **Integration framework:** UniFi support plus safe discovery previews for Docker, Proxmox, TrueNAS, Home Assistant, Pi-hole, AdGuard Home, Tailscale, Uptime Kuma, and Portainer.
+- **Notifications:** optional webhook messages when monitored services change state.
+- **Security hardening:** rate limiting, configurable CORS, role-protected mutations, safer file uploads, randomized filenames, and non-inline attachment delivery.
+- **Reproducible deployment:** Docker Compose, locked frontend/backend dependencies, health endpoints, and an automated SQLite storage test.
+
+The original inventory and knowledge-base features remain available for assets, services, documents, networking, projects/security, runbooks, uploads, and secret references.
 
 ## Public-safety notice
 
@@ -91,6 +97,7 @@ Collections:
 - `projectsSecurity`
 - `maintenance`
 - `connectors`
+- `runbookExecutions`
 
 ## Homelab Glue 3 operations
 
@@ -107,6 +114,8 @@ VIEWER_PASSWORD=another-long-unique-password
 ```
 
 The optional `API_KEY` supports automation through the `X-API-Key` header. Configure `NOTIFICATION_WEBHOOK_URL` for service status-change messages. Operations pages provide manual health checks, maintenance tracking, JSON exports, safety backups before restore, connector previews, and audit history.
+
+For a first deployment, leave `MONITORING_ENABLED=false` until the demo service URLs have been replaced with endpoints from your own environment.
 
 ## Secret references
 
@@ -142,57 +151,41 @@ UNIFI_INSECURE_TLS=true
 
 <!-- FEATURE_SCREENSHOTS_START -->
 
-## Feature Preview
+## Homelab Glue 3.0 preview
 
-A few highlights from the Homelab Docs Portal interface.
+All screenshots below are browser captures from the public-safe demo dataset. They contain no production infrastructure or credentials.
 
-### Dashboard Overview
+### Health monitoring
 
-Centralized landing page for homelab status, inventory summaries, recent activity, and quick navigation.
+Check documented services on demand or on a schedule. Track availability, HTTP responses, latency, certificate expiration, and status transitions from the operations workspace.
 
-![Dashboard Overview](docs/homelab-docs-screenshots/01-dashboard.png)
+![Homelab Glue health monitoring](docs/homelab-docs-screenshots/v3-monitoring.png)
 
----
+### Maintenance calendar
 
-### Services Inventory
+Keep patch windows, restore tests, certificate reviews, secret rotations, and other recurring work visible with owners and due dates.
 
-Track self-hosted apps, ports, URLs, owners, status, and operational notes in one clean service catalog.
+![Homelab Glue maintenance calendar](docs/homelab-docs-screenshots/v3-maintenance.png)
 
-![Services Inventory](docs/homelab-docs-screenshots/03-services.png)
+### Portable backup and restore
 
----
+Create retained snapshots, download a full JSON export, and restore a validated snapshot. Homelab Glue creates a safety backup before replacing current data.
 
-### Networking Overview
+![Homelab Glue backup and restore](docs/homelab-docs-screenshots/v3-backups.png)
 
-Document VLANs, network zones, topology notes, routing structure, and infrastructure relationships.
+### Integration catalog
 
-![Networking Overview](docs/homelab-docs-screenshots/04-network-overview.png)
+Configure external inventory sources and preview discovery results before allowing imported data to change the documented source of truth.
 
----
+![Homelab Glue integration catalog](docs/homelab-docs-screenshots/v3-integrations.png)
 
-### Interactive Topology
+### Structured runbooks
 
-Visualize lab relationships between gateways, switches, servers, endpoints, and service layers.
+Document repeatable procedures with impact, tags, validation, rollback guidance, linked records, executable checklists, and execution history.
 
-![Interactive Topology](docs/homelab-docs-screenshots/05-interactive-topology.png)
+![Homelab Glue runbooks](docs/homelab-docs-screenshots/v3-runbooks.png)
 
----
-
-### Runbooks
-
-Store repeatable operational procedures for backups, patching, recovery, incident response, and maintenance.
-
-![Runbooks](docs/homelab-docs-screenshots/14-runbooks.png)
-
----
-
-### Projects & Security
-
-Track security projects, hardening tasks, audits, lifecycle work, and remediation progress.
-
-![Projects and Security](docs/homelab-docs-screenshots/15-projects-security.png)
-
----
+The earlier inventory, networking, topology, document, security-project, and secret-reference captures remain available in the full gallery.
 
 For the full screenshot gallery, see:
 

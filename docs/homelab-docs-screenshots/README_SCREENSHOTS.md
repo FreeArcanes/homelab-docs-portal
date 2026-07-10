@@ -4,6 +4,17 @@ These are real browser-captured screenshots from the public-safe demo applicatio
 
 They are safe for GitHub and contain demo placeholders only.
 
+## Homelab Glue 3.0
+
+- `v3-dashboard.png` — operations dashboard and SQLite runtime overview
+- `v3-monitoring.png` — service health, HTTP status, and response times
+- `v3-maintenance.png` — recurring maintenance calendar
+- `v3-backups.png` — portable export, backup, and restore interface
+- `v3-integrations.png` — external connector catalog and sync previews
+- `v3-runbooks.png` — structured operational runbooks
+
+## Legacy 2.x gallery
+
 - `00-gallery-contact-sheet.png`
 - `01-dashboard.png`
 - `02-assets.png`
