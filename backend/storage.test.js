@@ -21,6 +21,9 @@ test("SQLite storage migrates, revisions, checks, and removes atomically", t => 
   assert.equal(storage.checks("service-1")[0].ok, true);
   assert.equal(storage.remove("services", "service-1", "tester"), true);
   assert.equal(storage.get("services", "service-1"), null);
+  storage.setSetting("setup.completed", true);
+  assert.equal(storage.setting("setup.completed"), true);
+  assert.equal(storage.setting("missing", "fallback"), "fallback");
   storage.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });

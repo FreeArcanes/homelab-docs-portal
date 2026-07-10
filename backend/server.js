@@ -5,7 +5,7 @@ import morgan from "morgan";
 import path from "path";
 import https from "https";
 import fs from "fs/promises";
-import { existsSync } from "fs";
+import { constants, existsSync } from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
@@ -17,12 +17,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const trustProxy = String(process.env.TRUST_PROXY || "false").toLowerCase();
+if (trustProxy === "true") app.set("trust proxy", 1);
 
 const PORT = process.env.PORT || 8110;
-const DATA_FILE = path.join(__dirname, "data", "data.json");
-const UPLOAD_DIR = path.join(__dirname, "uploads");
+const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, "data"));
+const DATA_FILE = path.join(DATA_DIR, "data.json");
+const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, "uploads"));
 const FRONTEND_DIST = path.join(__dirname, "..", "frontend", "dist");
-const storage = createStorage({ dataDir: path.dirname(DATA_FILE), legacyFile: DATA_FILE });
+const storage = createStorage({ dataDir: DATA_DIR, legacyFile: DATA_FILE });
 
 await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
 await fs.mkdir(UPLOAD_DIR, { recursive: true });
@@ -246,7 +249,7 @@ async function checkService(service) {
   return result;
 }
 
-app.get("/api/monitoring", (req, res) => res.json({ latest: storage.checks(), enabled: String(process.env.MONITORING_ENABLED || "true") === "true" }));
+app.get("/api/monitoring", (req, res) => res.json({ latest: storage.checks(), enabled: String(process.env.MONITORING_ENABLED || "false") === "true" }));
 app.get("/api/monitoring/:serviceId/history", (req, res) => res.json(storage.checks(req.params.serviceId)));
 app.post("/api/monitoring/check", requireEditor, async (req, res) => {
   const services = storage.list("services").filter(service => (req.body?.serviceId ? service.id === req.body.serviceId : true) && (service.healthUrl || service.url));
@@ -283,6 +286,103 @@ app.post("/api/integrations/:id/sync", requireEditor, async (req, res) => {
     const updated = storage.save("connectors", { ...connector, lastSyncAt: new Date().toISOString(), lastSyncStatus: response.ok ? "success" : "failed", discoveredCount: Array.isArray(payload) ? payload.length : null }, "synced", req.user.name);
     res.json({ connector: updated, preview: payload });
   } catch (error) { res.status(502).json({ error: error.message }); }
+});
+
+function envValue(value) {
+  const text = String(value ?? "");
+  if (/\r|\n/.test(text)) throw new Error("Configuration values cannot contain newlines");
+  const composeSafe = text.replaceAll("$", "$$");
+  return /[\s#!"'`$\\]/.test(text) ? JSON.stringify(composeSafe) : composeSafe;
+}
+
+function boundedNumber(value, fallback, min, max) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number)) throw new Error(`Expected a number between ${min} and ${max}`);
+  return Math.min(max, Math.max(min, Math.round(number)));
+}
+
+app.get("/api/setup/status", async (req, res) => {
+  const snapshot = storage.snapshot();
+  const writable = await Promise.all([path.dirname(DATA_FILE), UPLOAD_DIR].map(async target => {
+    try { await fs.access(target, constants.W_OK); return true; } catch { return false; }
+  }));
+  const authMode = String(process.env.AUTH_MODE || "off").toLowerCase();
+  const adminSafe = authMode === "basic" && Boolean(process.env.ADMIN_USERNAME) && Boolean(process.env.ADMIN_PASSWORD) && process.env.ADMIN_PASSWORD !== "change-me";
+  const counts = Object.fromEntries(storage.collections.map(name => [name, Array.isArray(snapshot[name]) ? snapshot[name].length : 0]));
+  res.json({
+    completed: Boolean(storage.setting("setup.completed", false)),
+    completedAt: storage.setting("setup.completedAt", null),
+    runtime: { version: "3.0.0", port: Number(PORT), storage: "sqlite", database: path.basename(storage.dbPath), nodeEnv: process.env.NODE_ENV || "development", auth: authMode },
+    checks: {
+      databaseWritable: writable[0], uploadsWritable: writable[1], authConfigured: adminSafe,
+      corsRestricted: Boolean(process.env.CORS_ORIGINS), monitoringEnabled: String(process.env.MONITORING_ENABLED || "false") === "true",
+      notificationConfigured: Boolean(process.env.NOTIFICATION_WEBHOOK_URL), unifiEnabled: unifiEnabled(), unifiCredentialsPresent: Boolean(process.env.UNIFI_USERNAME && process.env.UNIFI_PASSWORD)
+    },
+    counts
+  });
+});
+
+app.post("/api/setup/config-preview", requireEditor, (req, res) => {
+  try {
+    const config = req.body || {};
+    const port = boundedNumber(config.port, 8110, 1, 65535);
+    const hostPort = boundedNumber(config.hostPort, port, 1, 65535);
+    const rateLimitValue = boundedNumber(config.rateLimit, 240, 10, 100000);
+    const uploadMaxBytes = boundedNumber(config.uploadMaxBytes, 10485760, 1024, 1073741824);
+    const monitorSeconds = boundedNumber(config.monitoringIntervalSeconds, 300, 30, 86400);
+    const backupRetention = boundedNumber(config.backupRetention, 30, 1, 1000);
+    const authMode = config.authEnabled ? "basic" : "off";
+    if (authMode === "basic" && (!config.adminUsername || String(config.adminPassword || "").length < 12)) {
+      return res.status(400).json({ error: "Admin credentials and a password of at least 12 characters are required" });
+    }
+    if (config.authEnabled && Boolean(config.viewerUsername) !== Boolean(config.viewerPassword)) return res.status(400).json({ error: "Provide both read-only username and password, or leave both blank" });
+    if (config.viewerPassword && String(config.viewerPassword).length < 12) return res.status(400).json({ error: "Read-only password must be at least 12 characters" });
+    if (config.apiKey && String(config.apiKey).length < 24) return res.status(400).json({ error: "Automation API key must be at least 24 characters" });
+    const origins = String(config.corsOrigins || "").split(",").map(value => value.trim()).filter(Boolean);
+    if (!origins.length) return res.status(400).json({ error: "At least one allowed browser origin is required" });
+    for (const origin of origins) {
+      const parsed = new URL(origin);
+      if (!/^https?:$/.test(parsed.protocol) || parsed.origin !== origin.replace(/\/$/, "")) return res.status(400).json({ error: `Invalid browser origin: ${origin}` });
+    }
+    if (config.unifiEnabled && (!config.unifiHost || !config.unifiUsername || !config.unifiPassword)) {
+      return res.status(400).json({ error: "UniFi host, username, and password are required when UniFi is enabled" });
+    }
+    const lines = [
+      "# Homelab Glue generated configuration", `PORT=${port}`, "", "# Security", `AUTH_MODE=${authMode}`,
+      `ADMIN_USERNAME=${envValue(config.authEnabled ? config.adminUsername || "admin" : "")}`, `ADMIN_PASSWORD=${envValue(config.authEnabled ? config.adminPassword || "" : "")}`,
+      `VIEWER_USERNAME=${envValue(config.authEnabled ? config.viewerUsername || "" : "")}`, `VIEWER_PASSWORD=${envValue(config.authEnabled ? config.viewerPassword || "" : "")}`,
+      `API_KEY=${envValue(config.authEnabled ? config.apiKey || "" : "")}`, `CORS_ORIGINS=${envValue(origins.join(","))}`, `TRUST_PROXY=${Boolean(config.trustProxy)}`,
+      `RATE_LIMIT=${rateLimitValue}`, `UPLOAD_MAX_BYTES=${uploadMaxBytes}`,
+      "", "# Operations", `MONITORING_ENABLED=${Boolean(config.monitoringEnabled)}`, `MONITORING_INTERVAL_SECONDS=${monitorSeconds}`,
+      `NOTIFICATION_WEBHOOK_URL=${envValue(config.notificationWebhookUrl || "")}`, `BACKUP_RETENTION=${backupRetention}`,
+      "", "# Optional UniFi connector", `UNIFI_ENABLED=${Boolean(config.unifiEnabled)}`, `UNIFI_HOST=${envValue(config.unifiEnabled ? config.unifiHost || "" : "")}`,
+      `UNIFI_USERNAME=${envValue(config.unifiEnabled ? config.unifiUsername || "" : "")}`, `UNIFI_PASSWORD=${envValue(config.unifiEnabled ? config.unifiPassword || "" : "")}`,
+      `UNIFI_SITE=${envValue(config.unifiSite || "default")}`, `UNIFI_INSECURE_TLS=${Boolean(config.unifiInsecureTls)}`, ""
+    ];
+    const compose = [
+      "services:", "  homelab-glue:", "    build: .", "    container_name: homelab-glue", "    restart: unless-stopped", "    init: true",
+      "    env_file:", "      - .env", "    ports:", `      - \"${hostPort}:${port}\"`, "    volumes:",
+      "      - ./backend/data:/app/backend/data", "      - ./backend/uploads:/app/backend/uploads", "    healthcheck:",
+      `      test: [\"CMD\", \"node\", \"-e\", \"fetch('http://127.0.0.1:${port}/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\"]`,
+      "      interval: 30s", "      timeout: 5s", "      retries: 3", "      start_period: 20s", ""
+    ].join("\n");
+    res.json({ env: lines.join("\n"), compose, port, hostPort, restartRequired: true });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post("/api/setup/unifi-test", requireEditor, async (req, res) => {
+  try {
+    const result = await testUnifiConfig(req.body || {});
+    res.json(result);
+  } catch (error) { res.status(502).json({ ok: false, error: error.message }); }
+});
+
+app.post("/api/setup/complete", requireEditor, (req, res) => {
+  const at = new Date().toISOString();
+  storage.setSetting("setup.completed", true);
+  storage.setSetting("setup.completedAt", at);
+  storage.setSetting("setup.profile", { deploymentName: String(req.body?.deploymentName || "My Homelab"), completedBy: req.user.name });
+  res.json({ ok: true, completedAt: at });
 });
 
 const allowedUploadTypes = new Set(["application/pdf", "text/plain", "text/markdown", "image/png", "image/jpeg", "image/webp"]);
@@ -381,7 +481,7 @@ function requestJson(urlString, options = {}, body = null) {
           ...(options.headers || {})
         },
         agent: new https.Agent({
-          rejectUnauthorized: !unifiInsecureTls()
+          rejectUnauthorized: options.rejectUnauthorized ?? !unifiInsecureTls()
         }),
         timeout: 15000
       },
@@ -415,6 +515,23 @@ function requestJson(urlString, options = {}, body = null) {
     if (payload) req.write(payload);
     req.end();
   });
+}
+
+async function testUnifiConfig(config) {
+  const base = String(config.host || "").replace(/\/+$/, "");
+  const username = String(config.username || "");
+  const password = String(config.password || "");
+  const site = String(config.site || "default");
+  if (!/^https:\/\//i.test(base)) throw new Error("UniFi host must use an https:// URL");
+  if (!username || !password) throw new Error("UniFi username and password are required");
+  const login = await requestJson(`${base}/api/auth/login`, { method: "POST", rejectUnauthorized: !Boolean(config.insecureTls) }, { username, password });
+  if (login.status < 200 || login.status >= 300) throw new Error(`UniFi login failed with HTTP ${login.status}`);
+  const setCookie = login.headers["set-cookie"] || [];
+  const cookie = (Array.isArray(setCookie) ? setCookie : [setCookie]).map(value => String(value).split(";")[0]).join("; ");
+  if (!cookie) throw new Error("UniFi login succeeded but no session cookie was returned");
+  const devices = await requestJson(`${base}/proxy/network/api/s/${encodeURIComponent(site)}/stat/device`, { headers: { Cookie: cookie }, rejectUnauthorized: !Boolean(config.insecureTls) });
+  if (devices.status < 200 || devices.status >= 300) throw new Error(`UniFi site check failed with HTTP ${devices.status}`);
+  return { ok: true, site, deviceCount: Array.isArray(devices.data?.data) ? devices.data.data.length : 0, message: "Connection successful. Credentials were tested but not saved." };
 }
 
 async function unifiLoginV2() {
@@ -686,10 +803,25 @@ if (existsSync(FRONTEND_DIST)) {
 }
 
 const monitorInterval = Number(process.env.MONITORING_INTERVAL_SECONDS || 300) * 1000;
-if (String(process.env.MONITORING_ENABLED || "true") === "true" && monitorInterval >= 30000) {
+if (String(process.env.MONITORING_ENABLED || "false") === "true" && monitorInterval >= 30000) {
   setInterval(() => Promise.all(storage.list("services").filter(service => service.healthUrl || service.url).map(checkService)).catch(error => console.warn(`Scheduled checks failed: ${error.message}`)), monitorInterval).unref();
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Homelab Docs Portal running on port ${PORT}`);
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Homelab Glue running on port ${PORT}`);
 });
+
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received; closing Homelab Glue cleanly.`);
+  const forced = setTimeout(() => process.exit(1), 10000).unref();
+  server.close(() => {
+    clearTimeout(forced);
+    try { storage.close(); } catch {}
+    process.exit(0);
+  });
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

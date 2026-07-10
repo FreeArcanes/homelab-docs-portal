@@ -6,7 +6,9 @@ import {
   Boxes,
   CheckCircle2,
   Clock3,
+  Copy,
   Database,
+  Download,
   Edit3,
   ExternalLink,
   FileText,
@@ -15,15 +17,18 @@ import {
   Home,
   KeyRound,
   Layers3,
+  Lock,
   Network,
   Plus,
   RefreshCw,
+  Rocket,
   Search,
   Server,
   Shield,
   Terminal,
   Trash2,
   Wifi,
+  Wrench,
   X
 } from "lucide-react";
 import "./styles.css";
@@ -45,6 +50,7 @@ const EMPTY_DATA = {
 };
 
 const NAV = [
+  { id: "setup", label: "Setup Center", icon: Wrench },
   { id: "dashboard", label: "Dashboard", icon: Home },
   { id: "assets", label: "Assets", icon: Boxes },
   { id: "services", label: "Services", icon: Server },
@@ -83,6 +89,7 @@ const NAV = [
 ];
 
 const PAGE_META = {
+  setup: { title: "Setup Center", subtitle: "Configure, validate, and launch Homelab Glue with confidence." },
   dashboard: {
     title: "Dashboard",
     subtitle: "Operations command center for services, assets, runbooks, networking, and project notes."
@@ -319,16 +326,20 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [toast, setToast] = useState(null);
+  const [setupStatus, setSetupStatus] = useState(null);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [result, healthResult] = await Promise.all([
+      const [result, healthResult, setupResult] = await Promise.all([
         api("/api/data"),
-        api("/api/health").catch(() => null)
+        api("/api/health").catch(() => null),
+        api("/api/setup/status").catch(() => null)
       ]);
       setData(normalizeData(result));
       setHealth(healthResult);
+      setSetupStatus(setupResult);
+      if (setupResult && !setupResult.completed && !window.location.hash) switchPage("setup");
     } finally {
       setLoading(false);
     }
@@ -439,30 +450,30 @@ function App() {
       <main className="main">
         <header className="topbar">
           <div className="topbar-copy">
-            <div className="eyebrow">Demo Homelab</div>
+            <div className="eyebrow">Homelab Glue</div>
             <h1>{meta.title}</h1>
             <p>{meta.subtitle}</p>
           </div>
 
           <div className="topbar-actions">
-            <div className="search">
+            {active !== "setup" && <div className="search">
               <Search size={16} />
               <input
                 placeholder="Search docs, IPs, ports, tags..."
                 value={query}
                 onChange={e => setQuery(e.target.value)}
               />
-            </div>
+            </div>}
 
             <button className="btn ghost" onClick={loadData} disabled={loading}>
               <RefreshCw size={16} />
               Refresh
             </button>
 
-            <button className="btn" onClick={openCreate}>
+            {active !== "setup" && <button className="btn" onClick={openCreate}>
               <Plus size={16} />
               New Entry
-            </button>
+            </button>}
           </div>
         </header>
 
@@ -479,6 +490,8 @@ function App() {
             setSelectedItem={setSelectedItem}
             onEdit={openEdit}
             onDelete={deleteItem}
+            setupStatus={setupStatus}
+            onSetupComplete={loadData}
           />
         )}
       </main>
@@ -504,7 +517,7 @@ function Sidebar({ active, setActive, counts, health }) {
       <div className="brand">
         <div className="brand-mark">B</div>
         <div>
-          <div className="brand-title">Homelab Docs</div>
+          <div className="brand-title">Homelab Glue</div>
           <div className="brand-subtitle">Homelab Glue v3.0</div>
         </div>
       </div>
@@ -522,9 +535,7 @@ function Sidebar({ active, setActive, counts, health }) {
           <div className="system-row"><strong>Version</strong><span>{health?.version || "3.0.0"}</span></div>
         <div className="system-row"><strong>Status</strong><span className="green-text">{status}</span></div>
         <div className="system-divider" />
-        <div className="system-title">Coverage</div>
-        <div className="coverage-bar"><span style={{ width: "96%" }} /></div>
-        <div className="system-foot">Polished shell · CRUD · live UniFi-ready</div>
+        <div className="system-foot">SQLite · health checks · optional UniFi</div>
       </div>
     </aside>
   );
@@ -577,6 +588,8 @@ function NavItem({ item, active, setActive, counts }) {
 function Page(props) {
   const { active, data, counts, health, query, selectedItem, setSelectedItem, onEdit, onDelete } = props;
 
+  if (active === "setup") return <SetupWizard status={props.setupStatus} onComplete={props.onSetupComplete} />;
+
   if (active === "dashboard") return <Dashboard data={data} counts={counts} health={health} query={query} setActive={props.setActive} />;
   if (active === "assets") return <AssetsPage items={data.assets || []} query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
   if (active === "services") return <ServicesPage items={data.services || []} query={query} selectedItem={selectedItem} setSelectedItem={setSelectedItem} onEdit={onEdit} onDelete={onDelete} />;
@@ -603,7 +616,7 @@ function LoadingPanel() {
     <div className="loading-panel">
       <div className="spinner" />
       <div>
-        <strong>Loading Homelab Docs...</strong>
+        <strong>Loading Homelab Glue...</strong>
         <p>Pulling local data from the v2 API.</p>
       </div>
     </div>
@@ -632,7 +645,7 @@ function Dashboard({ data, counts, health, query }) {
           <div className="eyebrow">Command Center</div>
           <h2>Homelab Glue Operations Portal</h2>
           <p>
-            A polished, self-hosted knowledge base for your homelab: infrastructure inventory,
+            A self-hosted knowledge base for your homelab: infrastructure inventory,
             Docker services, networking, runbooks, security projects, and secret references.
           </p>
           <div className="hero-chips">
@@ -640,10 +653,6 @@ function Dashboard({ data, counts, health, query }) {
             <span>Auth: {health?.auth || "local"}</span>
             <span>{health?.ok ? "API healthy" : "API local/offline"}</span>
           </div>
-        </div>
-        <div className="migration-score">
-          <strong>96%</strong>
-          <span>Polished</span>
         </div>
       </div>
 
@@ -716,10 +725,10 @@ function Dashboard({ data, counts, health, query }) {
       </div>
 
       <section className="panel elevated">
-        <PanelTitle eyebrow="Migration" title="Finish Line Checklist" />
+        <PanelTitle eyebrow="Platform" title="Deployment Readiness" />
         <div className="migration-grid">
           {[
-            ["Dashboard shell", "Complete", "Polished command center with search and runtime cards."],
+            ["Dashboard shell", "Complete", "Command center with search and runtime cards."],
             ["CRUD flows", "Complete", "Create, edit, delete for docs, assets, services, runbooks, networking, and secrets."],
             ["Networking", "Complete", "Manual physical map plus live UniFi-ready pages."],
             ["Runbooks", "Complete", "Structured runbook view with steps, impact, and notes."],
@@ -1280,6 +1289,137 @@ function SimpleTable({ rows, columns }) {
       </div>
     </section>
   );
+}
+
+const SETUP_STEPS = [
+  ["welcome", "Welcome", Rocket],
+  ["deployment", "Deployment", Server],
+  ["security", "Security", Lock],
+  ["operations", "Operations", Gauge],
+  ["unifi", "UniFi (Optional)", Wifi],
+  ["finish", "Launch", CheckCircle2]
+];
+
+function SetupWizard({ status, onComplete }) {
+  const [step, setStep] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [unifiResult, setUnifiResult] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [form, setForm] = useState(() => ({
+    deploymentName: "My Homelab", port: 8110, hostPort: Number(window.location.port || status?.runtime?.port || 8110), corsOrigins: window.location.origin, trustProxy: false,
+    authEnabled: status?.runtime?.auth === "basic", adminUsername: "admin", adminPassword: "", viewerUsername: "", viewerPassword: "", apiKey: "",
+    rateLimit: 240, uploadMaxBytes: 10485760, monitoringEnabled: false, monitoringIntervalSeconds: 300, notificationWebhookUrl: "", backupRetention: 30,
+    unifiEnabled: false, unifiHost: "https://", unifiUsername: "", unifiPassword: "", unifiSite: "default", unifiInsecureTls: false
+  }));
+
+  function update(field, value) { setForm(current => ({ ...current, [field]: value })); }
+  function randomSecret(field) {
+    const bytes = new Uint8Array(24); crypto.getRandomValues(bytes);
+    update(field, Array.from(bytes, value => value.toString(16).padStart(2, "0")).join(""));
+  }
+
+  async function next() {
+    setError("");
+    if (step === 2 && form.authEnabled && (!form.adminUsername || form.adminPassword.length < 12)) return setError("Use an administrator password with at least 12 characters.");
+    if (step === 4 && form.unifiEnabled && !unifiResult?.ok) return setError("Test the UniFi connection successfully, or turn the optional connector off.");
+    if (step === SETUP_STEPS.length - 2) {
+      setBusy(true);
+      try { setPreview(await api("/api/setup/config-preview", { method: "POST", body: JSON.stringify(form) })); }
+      catch (err) { setError(errorMessage(err)); return; }
+      finally { setBusy(false); }
+    }
+    setStep(value => Math.min(SETUP_STEPS.length - 1, value + 1));
+  }
+
+  async function testUnifi() {
+    setBusy(true); setError(""); setUnifiResult(null);
+    try {
+      const result = await api("/api/setup/unifi-test", { method: "POST", body: JSON.stringify({ host: form.unifiHost, username: form.unifiUsername, password: form.unifiPassword, site: form.unifiSite, insecureTls: form.unifiInsecureTls }) });
+      setUnifiResult(result);
+    } catch (err) { setError(errorMessage(err)); }
+    finally { setBusy(false); }
+  }
+
+  async function skipUnifi() {
+    const skipped = { ...form, unifiEnabled: false, unifiHost: "", unifiUsername: "", unifiPassword: "", unifiSite: "default", unifiInsecureTls: false };
+    setForm(skipped); setUnifiResult(null); setError(""); setBusy(true);
+    try {
+      setPreview(await api("/api/setup/config-preview", { method: "POST", body: JSON.stringify(skipped) }));
+      setStep(SETUP_STEPS.length - 1);
+    } catch (err) { setError(errorMessage(err)); }
+    finally { setBusy(false); }
+  }
+
+  function downloadFile(contents, name) {
+    const url = URL.createObjectURL(new Blob([contents], { type: "text/plain" }));
+    const link = document.createElement("a"); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url);
+  }
+
+  async function copyEnv() {
+    await navigator.clipboard.writeText(preview.env); setCopied(true); setTimeout(() => setCopied(false), 1800);
+  }
+
+  async function complete() {
+    setBusy(true); setError("");
+    try { await api("/api/setup/complete", { method: "POST", body: JSON.stringify({ deploymentName: form.deploymentName }) }); await onComplete?.(); window.location.hash = "dashboard"; }
+    catch (err) { setError(errorMessage(err)); }
+    finally { setBusy(false); }
+  }
+
+  const current = SETUP_STEPS[step];
+  return (
+    <section className="setup-shell">
+      <aside className="setup-rail">
+        <div className="setup-orb"><Wrench size={28} /></div>
+        <div><div className="eyebrow">First-run assistant</div><h2>Build your control plane</h2><p>Six focused steps. No integration is mandatory.</p></div>
+        <div className="setup-progress">{SETUP_STEPS.map(([id, label, Icon], index) => <button key={id} className={`${index === step ? "active" : ""} ${index < step ? "done" : ""}`} onClick={() => index < step && setStep(index)}><span>{index < step ? <CheckCircle2 size={17} /> : <Icon size={17} />}</span><div><strong>{label}</strong><small>{index < step ? "Complete" : index === step ? "In progress" : `Step ${index + 1}`}</small></div></button>)}</div>
+        <div className="setup-privacy"><Shield size={18} /><div><strong>Private by design</strong><p>Connector passwords are only used for a live test and are never saved by the wizard.</p></div></div>
+      </aside>
+
+      <div className="setup-stage">
+        <div className="setup-stage-head"><div><div className="eyebrow">Step {step + 1} of {SETUP_STEPS.length}</div><h2>{current[1]}</h2></div><span className="setup-step-icon">{React.createElement(current[2], { size: 23 })}</span></div>
+        {error && <ErrorPanel message={error} />}
+
+        {step === 0 && <SetupWelcome status={status} />}
+        {step === 1 && <div className="setup-form"><div className="setup-callout"><Globe2 size={20} /><div><strong>Where will Homelab Glue live?</strong><p>The host port is what users open; Docker maps it to the internal application port.</p></div></div><div className="form-grid"><SetupInput label="Deployment name" value={form.deploymentName} onChange={v => update("deploymentName", v)} /><SetupInput label="Host port" type="number" value={form.hostPort} onChange={v => update("hostPort", Number(v))} hint="Example: 8120" /><SetupInput label="Internal port" type="number" value={form.port} onChange={v => update("port", Number(v))} hint="Usually 8110" /><SetupInput label="Allowed browser origin" value={form.corsOrigins} onChange={v => update("corsOrigins", v)} hint="Example: http://192.168.40.10:8120" /><SetupToggle label="Behind a trusted reverse proxy" description="Enable when Nginx, Caddy, Traefik, or another trusted proxy terminates HTTPS directly in front of this container." checked={form.trustProxy} onChange={v => update("trustProxy", v)} /></div></div>}
+        {step === 2 && <div className="setup-form"><SetupToggle label="Require sign-in" description="Recommended for every deployment containing real infrastructure data." checked={form.authEnabled} onChange={v => update("authEnabled", v)} />{form.authEnabled && <><div className="form-grid"><SetupInput label="Administrator username" value={form.adminUsername} onChange={v => update("adminUsername", v)} /><SetupSecret label="Administrator password" value={form.adminPassword} onChange={v => update("adminPassword", v)} onGenerate={() => randomSecret("adminPassword")} /><SetupInput label="Read-only username" value={form.viewerUsername} onChange={v => update("viewerUsername", v)} optional /><SetupSecret label="Read-only password" value={form.viewerPassword} onChange={v => update("viewerPassword", v)} onGenerate={() => randomSecret("viewerPassword")} optional /><SetupSecret label="Automation API key" value={form.apiKey} onChange={v => update("apiKey", v)} onGenerate={() => randomSecret("apiKey")} optional /></div></>}<div className="setup-callout warn"><AlertTriangle size={20} /><div><strong>Configuration file contains secrets</strong><p>Store the generated `.env` only on the server and never commit it to Git.</p></div></div></div>}
+        {step === 3 && <div className="setup-form"><div className="setup-grid-2"><SetupToggle label="Service monitoring" description="Check service availability on a schedule. Enable after replacing demo URLs." checked={form.monitoringEnabled} onChange={v => update("monitoringEnabled", v)} /><SetupInput label="Check interval (seconds)" type="number" value={form.monitoringIntervalSeconds} onChange={v => update("monitoringIntervalSeconds", Number(v))} /><SetupInput label="Backup retention" type="number" value={form.backupRetention} onChange={v => update("backupRetention", Number(v))} /><SetupInput label="Upload limit (bytes)" type="number" value={form.uploadMaxBytes} onChange={v => update("uploadMaxBytes", Number(v))} /><SetupInput label="Notification webhook" value={form.notificationWebhookUrl} onChange={v => update("notificationWebhookUrl", v)} optional wide /></div></div>}
+        {step === 4 && <div className="setup-form"><div className="optional-banner"><span>Optional integration</span><p>Nothing on this page is required to finish Homelab Glue setup.</p></div><SetupToggle label="Enable UniFi connector" description="Turn this on only if you want live UniFi devices, clients, networks, and topology." checked={form.unifiEnabled} onChange={v => { update("unifiEnabled", v); setUnifiResult(null); }} />{form.unifiEnabled ? <><div className="form-grid"><SetupInput label="Console URL" value={form.unifiHost} onChange={v => { update("unifiHost", v); setUnifiResult(null); }} hint="Use the local HTTPS console URL" /><SetupInput label="Site" value={form.unifiSite} onChange={v => { update("unifiSite", v); setUnifiResult(null); }} /><SetupInput label="Local username" value={form.unifiUsername} onChange={v => { update("unifiUsername", v); setUnifiResult(null); }} /><SetupSecret label="Local password" value={form.unifiPassword} onChange={v => { update("unifiPassword", v); setUnifiResult(null); }} /><SetupToggle label="Allow self-signed TLS" description="Use only for a trusted local console certificate." checked={form.unifiInsecureTls} onChange={v => { update("unifiInsecureTls", v); setUnifiResult(null); }} /></div><button className="btn ghost" onClick={testUnifi} disabled={busy}><Wifi size={16} />{busy ? "Testing…" : "Test connection"}</button>{unifiResult?.ok && <div className="setup-success"><CheckCircle2 size={20} /><div><strong>{unifiResult.message}</strong><p>{unifiResult.deviceCount} devices found in site “{unifiResult.site}”.</p></div></div>}</> : <div className="setup-skip"><Wifi size={34} /><h3>No UniFi? No problem.</h3><p>Skip this step and use every inventory, documentation, runbook, maintenance, monitoring, backup, and security feature without UniFi.</p><button className="btn ghost" onClick={skipUnifi} disabled={busy}>Skip UniFi and continue</button></div>}</div>}
+        {step === 5 && preview && <div className="setup-form"><div className="launch-card"><CheckCircle2 size={34} /><div><div className="eyebrow">Configuration ready</div><h3>Download, restart, launch.</h3><p>Save both files in the project root. Runtime environment changes cannot be applied from inside the app.</p></div></div><div className="config-preview"><div className="config-toolbar"><strong>.env</strong><div><button className="btn ghost compact" onClick={copyEnv}><Copy size={15} />{copied ? "Copied" : "Copy"}</button><button className="btn compact" onClick={() => downloadFile(preview.env, ".env")}><Download size={15} />Download .env</button><button className="btn ghost compact" onClick={() => downloadFile(preview.compose, "docker-compose.generated.yml")}><Download size={15} />Compose</button></div></div><pre>{preview.env}</pre></div><div className="launch-command"><Terminal size={18} /><code>docker compose -f docker-compose.generated.yml up -d --build</code></div></div>}
+
+        <div className="setup-actions"><button className="btn ghost" disabled={step === 0 || busy} onClick={() => setStep(value => value - 1)}>Back</button><div className="setup-actions-right">{step === 4 && form.unifiEnabled && <button className="btn ghost" disabled={busy} onClick={skipUnifi}>Skip UniFi</button>}{step < SETUP_STEPS.length - 1 ? <button className="btn" disabled={busy} onClick={next}>{busy ? "Validating…" : step === 4 && !form.unifiEnabled ? "Continue without UniFi" : "Continue"}<ExternalLink size={16} /></button> : <button className="btn" disabled={busy || !preview} onClick={complete}><Rocket size={16} />Finish setup</button>}</div></div>
+      </div>
+    </section>
+  );
+}
+
+function SetupWelcome({ status }) {
+  const checks = status?.checks || {};
+  const rows = [
+    ["SQLite database", checks.databaseWritable, "Persistent data directory is writable"],
+    ["Upload storage", checks.uploadsWritable, "Attachment directory is writable"],
+    ["Authentication", checks.authConfigured, checks.authConfigured ? "Current credentials pass baseline checks" : "Configure secure credentials in this wizard"],
+    ["CORS policy", checks.corsRestricted, checks.corsRestricted ? "Browser origins are restricted" : "Choose an allowed origin before public exposure"]
+  ];
+  return <div className="setup-form"><div className="setup-hero"><div><span className="setup-version">Homelab Glue {status?.runtime?.version || "3.0"}</span><h3>Your homelab deserves a proper front door.</h3><p>This assistant checks the host, builds a safe configuration, and walks through every optional integration without hiding what changes on your server.</p></div><div className="setup-score"><strong>{rows.filter(row => row[1]).length}/{rows.length}</strong><span>ready now</span></div></div><div className="readiness-list">{rows.map(([name, ok, note]) => <div key={name}><span className={ok ? "ready" : "attention"}>{ok ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}</span><div><strong>{name}</strong><p>{note}</p></div></div>)}</div></div>;
+}
+
+function SetupInput({ label, value, onChange, type = "text", hint, optional, wide }) {
+  return <label className={`setup-input ${wide ? "wide" : ""}`}><span>{label}{optional && <small>Optional</small>}</span><input type={type} value={value} onChange={event => onChange(event.target.value)} />{hint && <em>{hint}</em>}</label>;
+}
+
+function SetupSecret({ label, value, onChange, onGenerate, optional }) {
+  return <label className="setup-input"><span>{label}{optional && <small>Optional</small>}</span><div className="secret-input"><input type="password" value={value} onChange={event => onChange(event.target.value)} /><button type="button" onClick={onGenerate}>Generate</button></div></label>;
+}
+
+function SetupToggle({ label, description, checked, onChange }) {
+  return <label className="setup-toggle"><div><strong>{label}</strong><p>{description}</p></div><input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} /><span /></label>;
+}
+
+function errorMessage(error) {
+  try { return JSON.parse(error.message)?.error || error.message; } catch { return error.message; }
 }
 
 function OperationsPage({ section, data, onEdit, onDelete }) {

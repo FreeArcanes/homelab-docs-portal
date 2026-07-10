@@ -21,6 +21,7 @@ Homelab Glue 3.0 moves beyond a documentation-only portal and adds an operations
 - **Notifications:** optional webhook messages when monitored services change state.
 - **Security hardening:** rate limiting, configurable CORS, role-protected mutations, safer file uploads, randomized filenames, and non-inline attachment delivery.
 - **Reproducible deployment:** Docker Compose, locked frontend/backend dependencies, health endpoints, and an automated SQLite storage test.
+- **First-run Setup Center:** a six-step readiness assistant that validates storage, separates host/container ports, generates `.env` and Compose files, configures security and operations, and tests optional UniFi access without retaining credentials.
 
 The original inventory and knowledge-base features remain available for assets, services, documents, networking, projects/security, runbooks, uploads, and secret references.
 
@@ -37,6 +38,8 @@ Do **not** commit production data into this repository. Keep the following out o
 The included `.gitignore` is intentionally strict, but you should still manually review before pushing.
 
 ## Quick start
+
+New to Docker or self-hosting? Follow the complete beginner walkthrough in **[SETUP.md](SETUP.md)**.
 
 ```bash
 cp .env.example .env
@@ -55,6 +58,19 @@ Health check:
 ```bash
 curl http://localhost:8110/api/health
 ```
+
+On a new database, Homelab Glue opens the **Setup Center** automatically. The assistant walks through:
+
+1. Host and storage readiness
+2. Host-to-container port mapping and allowed browser origins
+3. Administrator, read-only, and automation credentials
+4. Monitoring, uploads, backups, retention, and notification webhooks
+5. Optional UniFi connectivity testing
+6. Downloading a generated `.env` and `docker-compose.generated.yml`
+
+UniFi is never required. Credentials entered for its connection test are used only for that request and are not stored by the wizard. Generated environment files contain secrets and must never be committed.
+
+The generated Compose file includes a container health check, persistent data and upload mounts, restart policy, and init process. Homelab Glue also handles container shutdown signals so SQLite is closed cleanly during updates and restarts.
 
 ## Local development
 

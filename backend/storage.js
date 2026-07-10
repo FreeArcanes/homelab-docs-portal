@@ -137,5 +137,16 @@ export function createStorage({ dataDir, legacyFile }) {
     return rows.map(r => ({ serviceId: r.service_id, ok: Boolean(r.ok), statusCode: r.status_code, responseMs: r.response_ms, tlsExpiresAt: r.tls_expires_at, error: r.error, checkedAt: r.checked_at }));
   }
 
-  return { dbPath, snapshot, list, get, save, remove, revisions, importSnapshot, recordCheck, checks, close: () => db.close(), collections: COLLECTIONS };
+  function setting(key, fallback = null) {
+    const row = getSetting.get(String(key));
+    if (!row) return fallback;
+    try { return JSON.parse(row.value); } catch { return row.value; }
+  }
+
+  function setSetting(key, value) {
+    putSetting.run(String(key), JSON.stringify(value));
+    return value;
+  }
+
+  return { dbPath, snapshot, list, get, save, remove, revisions, importSnapshot, recordCheck, checks, setting, setSetting, close: () => db.close(), collections: COLLECTIONS };
 }
